@@ -413,16 +413,14 @@ if (include_label) {
             }
         }
     }
-// === Colored border around tool pocket ===
+}
+// === Colored border around bin top edge ===
 color("blue")
 translate([0, 0, height[0]*7 - 1.2])
+linear_extrude(height = 1.2)
 difference() {
-    linear_extrude(height = 1.2)
-        offset(r = 2)
-        scale([25.4, 25.4])
-            import("cl_420_contour_1.dxf");
-    linear_extrude(height = 1.2)
-        scale([25.4, 25.4])
-            import("cl_420_contour_1.dxf");
-}
+    offset(r = 3.75)
+        square([width[0]*42 - 0.5 - 7.5, depth[0]*42 - 0.5 - 7.5], center=true);
+    offset(r = 3.75)
+        square([width[0]*42 - 4.5 - 7.5, depth[0]*42 - 4.5 - 7.5], center=true);
 }
