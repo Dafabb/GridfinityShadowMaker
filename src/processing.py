@@ -476,10 +476,8 @@ def generate_test_slab(dxf_path, gridx_size, gridy_size, console_text, file_name
             dxf_files = [dxf_path.replace("\\", "/")]
 
         dxf_cuts = "\n".join([
-            f'    translate([0, 0, -0.1])\n'
-            f'        linear_extrude(height = 1.6)\n'
-            f'            scale([25.4, 25.4])\n'
-            f'                import("{dxf}");'
+            f'    scale([25.4, 25.4])\n'
+            f'        import("{dxf}");'
             for dxf in dxf_files
         ])
 
@@ -493,8 +491,9 @@ def generate_test_slab(dxf_path, gridx_size, gridy_size, console_text, file_name
             f"slab_depth = {gridy_size}; // [1:0.5:6]\n"
             f"// Slab thickness in mm\n"
             f"slab_height = 1.2; // [0.6:0.2:3.0]\n\n"
+            f"linear_extrude(height = slab_height)\n"
             f"difference() {{\n"
-            f"    cube([slab_width*42, slab_depth*42, slab_height], center=true);\n"
+            f"    square([slab_width*42, slab_depth*42], center=true);\n"
             f"{dxf_cuts}\n"
             f"}}\n"
         )
