@@ -1,6 +1,6 @@
 from PyQt5 import QtWidgets, QtGui
 from src.ui import Ui_MainWindow # type: ignore
-from src.processing import find_diameter, find_contours, save_contours_as_dxf, select_image, import_to_openscad, exit_application, clear_canvas, create_main_window, display_image_on_canvas # type: ignore
+from src.processing import find_diameter, find_contours, save_contours_as_dxf, select_image, import_to_openscad, generate_test_slab, exit_application, clear_canvas, create_main_window, display_image_on_canvas
 import cv2
 import traceback
 from PIL import Image
@@ -42,7 +42,7 @@ def create_main_window():
         except Exception:
             pass
     
-    return (MainWindow, ui, canvas, ui.load_button, ui.process_button, ui.import_button, 
+    return (MainWindow, ui, canvas, ui.load_button, ui.process_button, 
             ui.exit_button, ui.threshold_entry, ui.offset_entry, ui.token_entry, 
             ui.resolution_entry, ui.console_text)
 
@@ -56,7 +56,7 @@ def main():
     if hasattr(QtCore.Qt, 'AA_UseHighDpiPixmaps'):
         QtWidgets.QApplication.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps, True)
     app = QtWidgets.QApplication([])
-    window, ui, canvas, load_button, process_button, import_button, exit_button, threshold_entry, offset_entry, token_entry, resolution_entry, console_text = create_main_window()
+    window, ui, canvas, load_button, process_button, exit_button, threshold_entry, offset_entry, token_entry, resolution_entry, console_text = create_main_window()
 
     def toggle_load_button():
         load_button.setEnabled(bool(ui.lineEdit.text()))  # Enable if lineEdit has text
@@ -110,7 +110,9 @@ def main():
 
     # Disable import_to_openscad button when splitDXF is toggled
     def on_splitdxf_toggled():
-        import_button.setEnabled(False)
+        ui.generate_bin_button.setEnabled(False)
+        ui.generate_test_button.setEnabled(False)
+
     ui.splitDXF.toggled.connect(on_splitdxf_toggled)
 
     def process_image(splitDXF=None):
@@ -134,11 +136,22 @@ def main():
                 splitDXF = ui.splitDXF.isChecked()
             dxf_path, gridx_size, gridy_size = save_contours_as_dxf(contours, file_name, float(token_entry.text()) / diameter, console_text, folder_name, splitDXF=splitDXF)
             console_text.setText(f"Processing image\nGrid X Size: {gridx_size}, Grid Y Size: {gridy_size}")
-            import_button.setEnabled(True)
-            import_button.dxf_path = dxf_path
-            import_button.gridx_size = gridx_size
-            import_button.gridy_size = gridy_size
-            import_button.folder_name = folder_name  # Store folder name for import_to_openscad
+#            import_button.setEnabled(True)
+#            import_button.dxf_path = dxf_path
+#            import_button.gridx_size = gridx_size
+#            import_button.gridy_size = gridy_size
+#            import_button.folder_name = folder_name  # Store folder name for import_to_openscad
+            ui.generate_bin_button.setEnabled(True)
+            ui.generate_bin_button.dxf_path = dxf_path
+            ui.generate_bin_button.gridx_size = gridx_size
+            ui.generate_bin_button.gridy_size = gridy_size
+            ui.generate_bin_button.folder_name = folder_name
+            ui.generate_test_button.setEnabled(True)
+            ui.generate_test_button.dxf_path = dxf_path
+            ui.generate_test_button.gridx_size = gridx_size
+            ui.generate_test_button.gridy_size = gridy_size
+            ui.generate_test_button.folder_name = folder_name
+
         except Exception as e:
             console_text.setText(f"Error processing image: {str(e)}")
             print(traceback.format_exc())
@@ -167,7 +180,9 @@ def main():
 
     load_button.clicked.connect(load_image)
     process_button.clicked.connect(lambda: process_image(splitDXF=ui.splitDXF.isChecked()))
-    import_button.clicked.connect(lambda: import_to_openscad(import_button.dxf_path, import_button.gridx_size, import_button.gridy_size, console_text, file_name, import_button.folder_name, ui.splitDXF.isChecked(), ui.border_color_combo.currentText(), ui.generateTestSlab.isChecked()))
+#    import_button.clicked.connect(lambda: import_to_openscad(import_button.dxf_path, import_button.gridx_size, import_button.gridy_size, console_text, file_name, import_button.folder_name, ui.splitDXF.isChecked(), ui.border_color_combo.currentText(), ui.generateTestSlab.isChecked()))
+    ui.generate_bin_button.clicked.connect(lambda: import_to_openscad(ui.generate_bin_button.dxf_path, ui.generate_bin_button.gridx_size, ui.generate_bin_button.gridy_size, console_text, file_name, ui.generate_bin_button.folder_name, ui.splitDXF.isChecked(), ui.border_color_combo.currentText()))
+    ui.generate_test_button.clicked.connect(lambda: generate_test_slab(ui.generate_test_button.dxf_path, ui.generate_test_button.gridx_size, ui.generate_test_button.gridy_size, console_text, file_name, ui.generate_test_button.folder_name, ui.splitDXF.isChecked()))
     exit_button.clicked.connect(lambda: exit_application(console_text))
     ui.SaveDefault.clicked.connect(save_defaults)
     ui.captureImage.clicked.connect(launch_capture_image)

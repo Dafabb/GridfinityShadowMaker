@@ -414,31 +414,6 @@ text("{label_text}", size = 7, font = "Arial Rounded MT Bold", halign = "center"
         with open(scad_file_path, 'w') as scad_file:
             scad_file.write(updated_scad_content)
 
-        # Generate test slab for fit validation
-        if generate_test_slab:
-            test_slab_path = scad_file_path.replace('.scad', '_test_slab.scad')
-            # Collect all DXF file references
-            if splitDXF and isinstance(dxf_path, list):
-                dxf_files = [p.replace("\\\\", "/") for p in dxf_path]
-            else:
-                dxf_files = [dxf_path.replace("\\\\", "/")]
-            dxf_cuts = "\\n".join([
-                f'    translate([0, 0, -0.1])\\n        linear_extrude(height = 1.6)\\n            scale([25.4, 25.4])\\n                import("{dxf}");'
-                for dxf in dxf_files
-            ])
-            test_slab_content = f"""// Test slab for fit validation — ~10-15 min print
-// Drop tool onto slab to check pocket fit before full print
-$fa = 6;
-$fs = 0.4;
-difference() {{
-    cube([{gridx_size}*42, {gridy_size}*42, 1.2], center=true);
-{dxf_cuts}
-}}
-"""
-            with open(test_slab_path, 'w') as test_file:
-                test_file.write(test_slab_content)
-            console_text.setText(console_text.text() + f"\\nTest slab written to: {os.path.basename(test_slab_path)}")
-
             # Generate OpenSCAD Customizer presets JSON
             import json
             presets_path = scad_file_path.replace('.scad', '.json')
@@ -468,21 +443,60 @@ difference() {{
                 json.dump(presets, pf, indent=2)
 
         # Paths to possible OpenSCAD executables
-        openscad_paths = [
-            "C:/Program Files/OpenSCAD/openscad.exe",
-            "C:/Program Files/OpenSCAD (Nightly)/openscad.exe"
-        ]
-        
-        # Find the first valid OpenSCAD executable
-        openscad_executable = next((path for path in openscad_paths if os.path.exists(path)), None)
-        if not openscad_executable:
-            console_text.setText("Error: OpenSCAD executable not found in expected directories.")
-            return
-        
-        # Open the SCAD file with OpenSCAD
-        subprocess.Popen([openscad_executable, scad_file_path])
+#        openscad_paths = [
+#            "C:/Program Files/OpenSCAD/openscad.exe",
+#            "C:/Program Files/OpenSCAD (Nightly)/openscad.exe"
+#        ]
+#
+#        # Find the first valid OpenSCAD executable
+#        openscad_executable = next((path for path in openscad_paths if os.path.exists(path)), None)
+#        if not openscad_executable:
+#            console_text.setText("Error: OpenSCAD executable not found in expected directories.")
+#            return
+#        
+#        # Open the SCAD file with OpenSCAD
+#        subprocess.Popen([openscad_executable, scad_file_path])
+        console_text.setText(f"Bin SCAD written to: {os.path.basename(scad_file_path)}")
+
     except Exception as e:
         console_text.setText(f"Error importing to OpenSCAD: {str(e)}")
+        print(traceback.format_exc())
+
+def generate_test_slab(dxf_path, gridx_size, gridy_size, console_text, file_name, folder_name, splitDXF=False):
+    try:
+        script_directory = os.path.dirname(os.path.abspath(__file__))
+        design_files_directory = os.path.join(script_directory, "..", folder_name)
+        os.makedirs(design_files_directory, exist_ok=True)
+        test_slab_path = os.path.join(design_files_directory, f"{file_name}_test_slab.scad")
+
+        # Collect all DXF file references
+        if splitDXF and isinstance(dxf_path, list):
+            dxf_files = [p.replace("\\", "/") for p in dxf_path]
+        else:
+            dxf_files = [dxf_path.replace("\\", "/")]
+
+        dxf_cuts = "\n".join([
+            f'    translate([0, 0, -0.1])\n'
+            f'        linear_extrude(height = 1.6)\n'
+            f'            scale([25.4, 25.4])\n'
+            f'                import("{dxf}");'
+            for dxf in dxf_files
+        ])
+        test_slab_content = (
+            f"// Test slab for fit validation\n"
+            f"// Drop tool onto slab to check pocket fit before full print\n"
+            f"$fa = 6;\n"
+            f"$fs = 0.4;\n\n"
+            f"difference() {{\n"
+            f"    cube([{gridx_size}*42, {gridy_size}*42, 1.2], center=true);\n"
+            f"{dxf_cuts}\n"
+            f"}}\n"
+        )
+        with open(test_slab_path, 'w') as test_file:
+            test_file.write(test_slab_content)
+        console_text.setText(f"Test slab written to: {os.path.basename(test_slab_path)}")
+    except Exception as e:
+        console_text.setText(f"Error generating test slab: {str(e)}")
         print(traceback.format_exc())
 
 def exit_application(console_text):
