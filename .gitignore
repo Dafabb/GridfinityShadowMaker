@@ -46,3 +46,25 @@ sections.json
 # If you only want to match your two known prefixes cl_ and mw_ for now:
 # **/cl_*_contour_[0-9]*.dxf
 # **/mw_*_contour_[0-9]*.dxf
+
+# Ignore generated contour DXF files across the repo
+**/*_contour_[0-9]*.dxf
+
+# Ignore work files: png, jpg, jpeg, 3mf, scad
+# Only in tool_holders/ and tool_holders/pending/ and their subfolders
+# Use forward slashes even on Windows
+tool_holders/*.png
+tool_holders/*.jpg
+tool_holders/*.jpeg
+tool_holders/*.3mf
+tool_holders/*.scad
+
+tool_holders/pending/**/*.png
+tool_holders/pending/**/*.jpg
+tool_holders/pending/**/*.jpeg
+tool_holders/pending/**/*.3mf
+tool_holders/pending/**/*.scad
+
+# Exception: keep everything in tool_holders/final/
+# The ! must come AFTER the ignore rules above
+!tool_holders/final/

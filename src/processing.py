@@ -480,23 +480,23 @@ def generate_test_slab(dxf_path, gridx_size, gridy_size, console_text, file_name
             f'        import("{dxf}");'
             for dxf in dxf_files
         ])
-
         test_slab_content = (
             f"// Test slab for fit validation\n"
             f"// Drop tool onto slab to check pocket fit before full print\n\n"
             f"/* [Slab Settings] */\n"
-            f"// Width in Gridfinity units\n"
-            f"slab_width = {gridx_size}; // [1:0.5:12]\n"
-            f"// Depth in Gridfinity units\n"
-            f"slab_depth = {gridy_size}; // [1:0.5:6]\n"
+            f"// Margin around tool outline in mm\n"
+            f"margin = 10; // [5:1:30]\n"
             f"// Slab thickness in mm\n"
-            f"slab_height = 1.2; // [0.6:0.2:3.0]\n\n"
+            f"slab_height = 0.60; // [0.20:0.20:2.0]\n\n"
             f"linear_extrude(height = slab_height)\n"
             f"difference() {{\n"
-            f"    square([slab_width*42, slab_depth*42], center=true);\n"
+            f"    offset(delta = margin)\n"
+            f"        scale([25.4, 25.4])\n"
+            f"            import(\"{dxf_files[0]}\");\n"
             f"{dxf_cuts}\n"
             f"}}\n"
         )
+
         with open(test_slab_path, 'w') as test_file:
             test_file.write(test_slab_content)
         console_text.setText(f"Test slab written to: {os.path.basename(test_slab_path)}")
