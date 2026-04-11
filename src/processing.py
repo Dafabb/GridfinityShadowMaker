@@ -102,8 +102,10 @@ def calculate_scoop_positions(dxf_path, folder_path, gridy_size, splitDXF=False)
         pass
     return scoop_y_pos, scoop_y_neg
 
-def generate_border_and_text(label_text, border_color="blue"):
+def generate_border_and_text(label_text, border_color="blue", gridx=6, gridy=2):
     """Generate border/text parameters and geometry for SCAD injection."""
+    text_x = gridx * 42 / 2 - 37
+    text_y = gridy * 42 / 2 - 12
     params = (
         f'\n/* [Border and Text] */\n'
         f'border_enabled = true; // true or false\n'
@@ -111,8 +113,8 @@ def generate_border_and_text(label_text, border_color="blue"):
         f'text_enabled = true; // true or false\n'
         f'text_content = "{label_text}";\n'
         f'text_size = 7; // [4:1:14]\n'
-        f'text_x = width[0]*42/2 - 37;\n'
-        f'text_y = depth[0]*42/2 - 12;\n'
+        f'text_x = {text_x:.1f}; // [-200:1:200]\n'
+        f'text_y = {text_y:.1f}; // [-200:1:200]\n'
     )
     geometry = f"""
 // === Colored border around bin top edge ===
@@ -492,14 +494,13 @@ divider_slot_spanning = false;
         label_text = file_name.upper().replace('_', ' ')
 
         # Add border and text
-        border_params, border_geometry = generate_border_and_text(label_text, border_color)
+        border_params, border_geometry = generate_border_and_text(label_text, border_color, gridx_size, gridy_size)
         updated_scad_content = updated_scad_content.replace(
             'module end_of_customizer_opts() {}',
             border_params + '\nmodule end_of_customizer_opts() {}'
         )
         updated_scad_content += border_geometry
 
-        updated_scad_content += border_and_text
         with open(scad_file_path, 'w') as scad_file:
             scad_file.write(updated_scad_content)
 
