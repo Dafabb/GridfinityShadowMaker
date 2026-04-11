@@ -84,6 +84,27 @@ def measure_dxf_bounding_box(dxf_path, folder_path, splitDXF=False):
     except Exception:
         return ""
 
+def generate_finger_scoops(dxf_path, folder_path, gridy_size, splitDXF=False, scoop_diameter=22):
+    """Generate SCAD finger scoop cutouts positioned at tool outline edges."""
+    scoop_y = gridy_size * 42 / 2  # fallback to bin edge
+    try:
+        if splitDXF and isinstance(dxf_path, list):
+            measure_file = os.path.join(folder_path, os.path.basename(dxf_path[0]))
+        else:
+            measure_file = os.path.join(folder_path, os.path.basename(dxf_path))
+        doc = ezdxf.readfile(measure_file)
+        msp = doc.modelspace()
+        pts = [p for e in msp for p in e.get_points()]
+        scoop_y = (max(p[1] for p in pts) - min(p[1] for p in pts)) * 25.4 / 2
+    except Exception:
+        pass
+
+    return (
+        f"\n// Finger scoop cutouts - {scoop_diameter}mm circles at tool outline edges\n"
+        f"translate([0, {scoop_y:.1f}, -1]) cylinder(h = height[0]*7 + 10, d = {scoop_diameter}, $fn = 64);\n"
+        f"translate([0, -{scoop_y:.1f}, -1]) cylinder(h = height[0]*7 + 10, d = {scoop_diameter}, $fn = 64);\n"
+    )
+
 def preprocess_image(image, threshold_input):
     if isinstance(image, str):
         image = cv2.imread(image)
@@ -406,6 +427,15 @@ divider_slot_spanning = false;
 
         # Build label from filename: cl_420 -> "CL 420"
         label_text = file_name.upper().replace('_', ' ')
+
+        # Add finger scoop cutouts inside the main render difference block
+        # Add finger scoop cutouts
+        finger_scoops = generate_finger_scoops(dxf_path, design_files_directory, gridy_size, splitDXF)
+        updated_scad_content = updated_scad_content.replace(
+            '}\n\n// Conditionally extrude the DXF',
+            finger_scoops + '}\n\n// Conditionally extrude the DXF'
+        )
+
         # Add colored border and text label
         border_and_text = f"""
 // === Colored border around bin top edge ===
