@@ -167,7 +167,7 @@ def main():
 
     load_button.clicked.connect(load_image)
     process_button.clicked.connect(lambda: process_image(splitDXF=ui.splitDXF.isChecked()))
-    import_button.clicked.connect(lambda: import_to_openscad(import_button.dxf_path, import_button.gridx_size, import_button.gridy_size, console_text, file_name, import_button.folder_name, ui.splitDXF.isChecked()))
+    import_button.clicked.connect(lambda: import_to_openscad(import_button.dxf_path, import_button.gridx_size, import_button.gridy_size, console_text, file_name, import_button.folder_name, ui.splitDXF.isChecked(), ui.border_color_combo.currentText(), ui.generateTestSlab.isChecked()))
     exit_button.clicked.connect(lambda: exit_application(console_text))
     ui.SaveDefault.clicked.connect(save_defaults)
     ui.captureImage.clicked.connect(launch_capture_image)

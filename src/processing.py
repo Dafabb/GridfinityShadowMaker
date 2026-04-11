@@ -245,7 +245,7 @@ def select_image(console_text, default_dir=None):
         print(traceback.format_exc())
         return None, None
 
-def import_to_openscad(dxf_path, gridx_size, gridy_size, console_text, file_name, folder_name, splitDXF=False):
+def import_to_openscad(dxf_path, gridx_size, gridy_size, console_text, file_name, folder_name, splitDXF=False, border_color="blue", generate_test_slab=True):
     try:
         global scad_file_path  # Use the global variable to keep track of the SCAD file
         scad_template_path = os.path.join(os.path.dirname(__file__), "..", "Step 2 DXF to STL.scad")
@@ -360,6 +360,10 @@ def import_to_openscad(dxf_path, gridx_size, gridy_size, console_text, file_name
         #updated_scad_content = updated_scad_content.replace('slot_rotation = 90;', f'slot_rotation = {slot_rotation};')
         #updated_scad_content = updated_scad_content.replace('slot_width = 40;', f'slot_width = {slot_width};')
         updated_scad_content = updated_scad_content.replace('multiple_dxf = false;', f'multiple_dxf = {str(splitDXF).lower()};')
+        # Disable chamfered extrude (causes CGAL Minkowski errors with border)
+        updated_scad_content = updated_scad_content.replace('use_chamfered_extrude = true;', 'use_chamfered_extrude = false;')
+        # Disable finger slots (drawn on shadow image instead)
+        updated_scad_content = updated_scad_content.replace('use_finger_slots = true;', 'use_finger_slots = false;')
 
         # Save the SCAD file in the folder specified by folder_name
         script_directory = os.path.dirname(os.path.abspath(__file__))
@@ -384,10 +388,12 @@ divider_slot_spanning = false;
             'text_font = "Aldo";\n' + divider_params
         )
 
-        # Add colored border and text label at end of file
+        # Build label from filename: cl_420 -> "CL 420"
+        label_text = file_name.upper().replace('_', ' ')
+        # Add colored border and text label
         border_and_text = f"""
 // === Colored border around bin top edge ===
-color("blue")
+color("{border_color}")
 translate([0, 0, height[0]*7])
 linear_extrude(height = 2)
 difference() {{
@@ -398,16 +404,69 @@ difference() {{
 }}
 
 // === Tool label text ===
-color("blue")
+color("{border_color}")
 translate([width[0]*42/2 - 37, depth[0]*42/2 - 12, height[0]*7])
 linear_extrude(height = 2)
 rotate([0, 0, 180])
-text("{file_name.upper().replace('_', ' ')}", size = 7, font = "Arial Rounded MT Bold", halign = "center", valign = "center");
+text("{label_text}", size = 7, font = "Arial Rounded MT Bold", halign = "center", valign = "center");
 """
         updated_scad_content += border_and_text
         with open(scad_file_path, 'w') as scad_file:
             scad_file.write(updated_scad_content)
-        
+
+        # Generate test slab for fit validation
+        if generate_test_slab:
+            test_slab_path = scad_file_path.replace('.scad', '_test_slab.scad')
+            # Collect all DXF file references
+            if splitDXF and isinstance(dxf_path, list):
+                dxf_files = [p.replace("\\\\", "/") for p in dxf_path]
+            else:
+                dxf_files = [dxf_path.replace("\\\\", "/")]
+            dxf_cuts = "\\n".join([
+                f'    translate([0, 0, -0.1])\\n        linear_extrude(height = 1.6)\\n            scale([25.4, 25.4])\\n                import("{dxf}");'
+                for dxf in dxf_files
+            ])
+            test_slab_content = f"""// Test slab for fit validation — ~10-15 min print
+// Drop tool onto slab to check pocket fit before full print
+$fa = 6;
+$fs = 0.4;
+difference() {{
+    cube([{gridx_size}*42, {gridy_size}*42, 1.2], center=true);
+{dxf_cuts}
+}}
+"""
+            with open(test_slab_path, 'w') as test_file:
+                test_file.write(test_slab_content)
+            console_text.setText(console_text.text() + f"\\nTest slab written to: {os.path.basename(test_slab_path)}")
+
+            # Generate OpenSCAD Customizer presets JSON
+            import json
+            presets_path = scad_file_path.replace('.scad', '.json')
+            presets = {
+                "parameterSets": {
+                    "standard": {
+                        "size": f"[{gridx_size}, {gridy_size}, 2.8]",
+                        "use_chamfered_extrude": "false",
+                        "lip_style": "none",
+                        "use_finger_slots": "false",
+                        "use_section_cut": "false",
+                        "add_shape_data": "false",
+                        "half_pitch": "false",
+                        "enable_magnets": "false",
+                        "include_post": "false",
+                        "include_cutout": "false",
+                        "include_label": "false",
+                        "text_1": "false",
+                        "text_2": "false",
+                        "filled_in": "enabled",
+                        "render_position": "center"
+                    }
+                },
+                "fileFormatVersion": "1"
+            }
+            with open(presets_path, 'w') as pf:
+                json.dump(presets, pf, indent=2)
+
         # Paths to possible OpenSCAD executables
         openscad_paths = [
             "C:/Program Files/OpenSCAD/openscad.exe",

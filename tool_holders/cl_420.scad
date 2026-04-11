@@ -10,7 +10,7 @@ use <src/gridfinity_shape_cutter.scad>
 shape_data = [[-1.75,0.0,2.6,0.0,1.32,],[-4.75,0.0,2.6,0.0,1.32,],[0.66,0.81,1.22,0.0,1.5,],[0.66,-0.81,1.22,0.0,1.5,],[2.28,0.81,1.22,0.0,1.5,],[2.28,-0.81,1.22,0.0,1.5,]];
 
 // [width, depth, height]
-size = [7, 2, 6]; // .1 
+size = [7, 2, 2.8]; // .1 
 // [units,mm] units or mm, ex: [2,0] or [0,84]
 width = [size[0], 0]; // .1
 // [units,mm] units or mm, ex: [2,0] or [0,84]
@@ -18,7 +18,7 @@ depth = [size[1], 0]; // .1
 // [units,mm] units or mm, ex: [6,0] or [0,42]
 height = [size[2], 0]; // .1
 // === Chamfered DXF Extrusion Option === //
-use_chamfered_extrude = true; // Set to true to use chamfered extrusion
+use_chamfered_extrude = false; // Set to true to use chamfered extrusion
 chamfer_height = 5;      // mm, height of chamfer
 
 lip_style = "none";  // [ normal, reduced, reduced_double, minimum, none:not stackable ]
@@ -37,7 +37,7 @@ position = [position_1];
 
 
 /* [Finger Slot Options] */
-use_finger_slots = true; // true or false
+use_finger_slots = false; // true or false
 slot_shape_1 = "scoop"; // [none, rectangle, oval, scoop, triangle, keyhole, teardrop]
 slot_params_1 = [80, 40, 9, 0]; // length (mm), width (mm), height (mm), rotation (deg)
 slot_pos_1 = [0.000000,0.000000]; // Translation position [x, y] in mm
@@ -133,6 +133,17 @@ fn = 0;
 force_render = true;
 minimum_printable_pad_size = 0.2;
 text_font = "Aldo";
+
+divider_walls_enabled = false;
+divider_walls = 0;
+divider_headroom = 0;
+divider_walls_support_thickness = 0;
+divider_wall_slot_size = 0;
+divider_walls_spacing = 0;
+divider_walls_thickness = 0;
+divider_clearance = 0;
+divider_slot_spanning = false;
+
 
 module end_of_customizer_opts() {}
 
@@ -424,9 +435,10 @@ difference() {
     offset(r = 3.75)
         square([width[0]*42 - 4.5 - 7.5, depth[0]*42 - 4.5 - 7.5], center=true);
 }
+
 // === Tool label text ===
 color("blue")
-translate([110, depth[0]*42/2 - 12, height[0]*7])
+translate([width[0]*42/2 - 37, depth[0]*42/2 - 12, height[0]*7])
 linear_extrude(height = 2)
 rotate([0, 0, 180])
 text("CL 420", size = 7, font = "Arial Rounded MT Bold", halign = "center", valign = "center");
