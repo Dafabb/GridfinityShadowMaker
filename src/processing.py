@@ -356,7 +356,7 @@ def import_to_openscad(dxf_path, gridx_size, gridy_size, console_text, file_name
         # Determine slot rotation and width based on gridx_size and gridy_size
         #slot_rotation = 0 if gridx_size > gridy_size else 90
         #slot_width = 80 if min(gridx_size, gridy_size) > 2 else 40
-        updated_scad_content = updated_scad_content.replace('size = [5, 2, 6];', f'size = [{gridx_size}, {gridy_size}, 6];')
+        updated_scad_content = updated_scad_content.replace('size = [5, 2, 6];', f'size = [{gridx_size}, {gridy_size}, 2.8];')
         #updated_scad_content = updated_scad_content.replace('slot_rotation = 90;', f'slot_rotation = {slot_rotation};')
         #updated_scad_content = updated_scad_content.replace('slot_width = 40;', f'slot_width = {slot_width};')
         updated_scad_content = updated_scad_content.replace('multiple_dxf = false;', f'multiple_dxf = {str(splitDXF).lower()};')
@@ -366,6 +366,45 @@ def import_to_openscad(dxf_path, gridx_size, gridy_size, console_text, file_name
         design_files_directory = os.path.join(script_directory, "..", folder_name)
         os.makedirs(design_files_directory, exist_ok=True)
         scad_file_path = os.path.join(design_files_directory, f"{file_name}.scad")
+
+        # Add divider parameters (required for gridfinity_cup module)
+        divider_params = """
+divider_walls_enabled = false;
+divider_walls = 0;
+divider_headroom = 0;
+divider_walls_support_thickness = 0;
+divider_wall_slot_size = 0;
+divider_walls_spacing = 0;
+divider_walls_thickness = 0;
+divider_clearance = 0;
+divider_slot_spanning = false;
+"""
+        updated_scad_content = updated_scad_content.replace(
+            'text_font = "Aldo";',
+            'text_font = "Aldo";\n' + divider_params
+        )
+
+        # Add colored border and text label at end of file
+        border_and_text = f"""
+// === Colored border around bin top edge ===
+color("blue")
+translate([0, 0, height[0]*7])
+linear_extrude(height = 2)
+difference() {{
+    offset(r = 3.75)
+        square([width[0]*42 - 0.5 - 7.5, depth[0]*42 - 0.5 - 7.5], center=true);
+    offset(r = 3.75)
+        square([width[0]*42 - 4.5 - 7.5, depth[0]*42 - 4.5 - 7.5], center=true);
+}}
+
+// === Tool label text ===
+color("blue")
+translate([width[0]*42/2 - 37, depth[0]*42/2 - 12, height[0]*7])
+linear_extrude(height = 2)
+rotate([0, 0, 180])
+text("{file_name.upper().replace('_', ' ')}", size = 7, font = "Arial Rounded MT Bold", halign = "center", valign = "center");
+"""
+        updated_scad_content += border_and_text
         with open(scad_file_path, 'w') as scad_file:
             scad_file.write(updated_scad_content)
         

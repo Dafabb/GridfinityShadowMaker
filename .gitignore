@@ -31,3 +31,18 @@ camera_settings_cache.pkl
 Step 2 DXF to STL.json
 sections.json
 /test
+
+# Ignore generated contour DXF files across the repo
+# Pattern: *_contour_N.dxf where * is any prefix and N is any number
+# Examples: cl_420_contour_1.dxf, mw_12314_contour_12.dxf, xyz_7_contour_999.dxf
+# Works in any directory or subdirectory
+
+**/*_contour_[0-9]*.dxf
+
+# If you want to be more specific and only match prefixes that look like 
+# letters_underscore_numbers before _contour, use this instead:
+# **[a-z]*_[0-9]*_contour_[0-9]*.dxf
+
+# If you only want to match your two known prefixes cl_ and mw_ for now:
+# **/cl_*_contour_[0-9]*.dxf
+# **/mw_*_contour_[0-9]*.dxf

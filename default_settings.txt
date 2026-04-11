@@ -1,4 +1,4 @@
 threshold=145
-offset=0.08
+offset=0.04
 token=3.000
 resolution=20
