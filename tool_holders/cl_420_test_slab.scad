@@ -1,8 +1,17 @@
-// Test slab for fit validation — ~10-15 min print
+// Test slab for fit validation
 // Drop tool onto slab to check pocket fit before full print
-$fa = 6;
-$fs = 0.4;
+
+/* [Slab Settings] */
+// Margin around tool outline in mm
+margin = 10; // [5:1:30]
+// Slab thickness in mm
+slab_height = 0.60; // [0.20:0.20:2.0]
+
+linear_extrude(height = slab_height)
 difference() {
-    cube([7*42, 2*42, 1.2], center=true);
-    translate([0, 0, -0.1])\n        linear_extrude(height = 1.6)\n            scale([25.4, 25.4])\n                import("cl_420_contour_1.dxf");
+    offset(delta = margin)
+        scale([25.4, 25.4])
+            import("cl_420_contour_1.dxf");
+    scale([25.4, 25.4])
+        import("cl_420_contour_1.dxf");
 }
