@@ -84,9 +84,10 @@ def measure_dxf_bounding_box(dxf_path, folder_path, splitDXF=False):
     except Exception:
         return ""
 
-def generate_finger_scoops(dxf_path, folder_path, gridy_size, splitDXF=False, scoop_diameter=22):
-    """Generate SCAD finger scoop cutouts positioned at tool outline edges."""
-    scoop_y = gridy_size * 42 / 2  # fallback to bin edge
+def calculate_scoop_positions(dxf_path, folder_path, gridy_size, splitDXF=False):
+    """Calculate Y positions for finger scoops from DXF tool outline edges."""
+    scoop_y_pos = gridy_size * 42 / 2
+    scoop_y_neg = gridy_size * 42 / 2
     try:
         if splitDXF and isinstance(dxf_path, list):
             measure_file = os.path.join(folder_path, os.path.basename(dxf_path[0]))
@@ -95,15 +96,48 @@ def generate_finger_scoops(dxf_path, folder_path, gridy_size, splitDXF=False, sc
         doc = ezdxf.readfile(measure_file)
         msp = doc.modelspace()
         pts = [p for e in msp for p in e.get_points()]
-        scoop_y = (max(p[1] for p in pts) - min(p[1] for p in pts)) * 25.4 / 2
+        scoop_y_pos = max(p[1] for p in pts) * 25.4
+        scoop_y_neg = abs(min(p[1] for p in pts)) * 25.4
     except Exception:
         pass
+    return scoop_y_pos, scoop_y_neg
 
-    return (
-        f"\n// Finger scoop cutouts - {scoop_diameter}mm circles at tool outline edges\n"
-        f"translate([0, {scoop_y:.1f}, -1]) cylinder(h = height[0]*7 + 10, d = {scoop_diameter}, $fn = 64);\n"
-        f"translate([0, -{scoop_y:.1f}, -1]) cylinder(h = height[0]*7 + 10, d = {scoop_diameter}, $fn = 64);\n"
+def generate_border_and_text(label_text, border_color="blue"):
+    """Generate border/text parameters and geometry for SCAD injection."""
+    params = (
+        f'\n/* [Border and Text] */\n'
+        f'border_enabled = true; // true or false\n'
+        f'border_height = 2; // [1:0.5:6]\n'
+        f'text_enabled = true; // true or false\n'
+        f'text_content = "{label_text}";\n'
+        f'text_size = 7; // [4:1:14]\n'
+        f'text_x = width[0]*42/2 - 37;\n'
+        f'text_y = depth[0]*42/2 - 12;\n'
     )
+    geometry = f"""
+// === Colored border around bin top edge ===
+if (border_enabled) {{
+    color("{border_color}")
+    translate([0, 0, height[0]*7])
+    linear_extrude(height = border_height)
+    difference() {{
+        offset(r = 3.75)
+            square([width[0]*42 - 0.5 - 7.5, depth[0]*42 - 0.5 - 7.5], center=true);
+        offset(r = 3.75)
+            square([width[0]*42 - 4.5 - 7.5, depth[0]*42 - 4.5 - 7.5], center=true);
+    }}
+}}
+
+// === Tool label text ===
+if (text_enabled) {{
+    color("{border_color}")
+    translate([text_x, text_y, height[0]*7])
+    linear_extrude(height = border_height)
+    rotate([0, 0, 180])
+    text(text_content, size = text_size, font = "Arial Rounded MT Bold", halign = "center", valign = "center");
+}}
+"""
+    return params, geometry
 
 def preprocess_image(image, threshold_input):
     if isinstance(image, str):
@@ -399,14 +433,39 @@ def generate_bin_scad(dxf_path, gridx_size, gridy_size, console_text, file_name,
         updated_scad_content = updated_scad_content.replace('multiple_dxf = false;', f'multiple_dxf = {str(splitDXF).lower()};')
         # Disable chamfered extrude (causes CGAL Minkowski errors with border)
         updated_scad_content = updated_scad_content.replace('use_chamfered_extrude = true;', 'use_chamfered_extrude = false;')
-        # Disable finger slots (drawn on shadow image instead)
-        updated_scad_content = updated_scad_content.replace('use_finger_slots = true;', 'use_finger_slots = false;')
 
         # Save the SCAD file in the folder specified by folder_name
         script_directory = os.path.dirname(os.path.abspath(__file__))
         design_files_directory = os.path.join(script_directory, "..", folder_name)
         os.makedirs(design_files_directory, exist_ok=True)
         scad_file_path = os.path.join(design_files_directory, f"{file_name}.scad")
+
+        # Configure finger scoops using built-in finger slot system
+        import re
+        scoop_y_pos, scoop_y_neg = calculate_scoop_positions(dxf_path, design_files_directory, gridy_size, splitDXF)
+        finger_slot_replacement = (
+            f'/* [Finger Slot Options] */\n'
+            f'use_finger_slots = true; // true or false\n'
+            f'scoop_diameter = 20; // [10:1:40]\n'
+            f'scoop_depth = 10; // [5:1:30]\n'
+            f'slot_shape_1 = "oval"; // [none, rectangle, oval, scoop, triangle, keyhole, teardrop]\n'
+            f'slot_params_1 = [scoop_diameter, scoop_diameter, scoop_depth, 0]; // length, width, height, rotation\n'
+            f'slot_pos_1 = [0, {scoop_y_pos:.1f}]; // [x, y] in mm\n'
+            f'slot_shape_2 = "oval"; // [none, rectangle, oval, scoop, triangle, keyhole, teardrop]\n'
+            f'slot_params_2 = [scoop_diameter, scoop_diameter, scoop_depth, 0];\n'
+            f'slot_pos_2 = [0, -{scoop_y_neg:.1f}];\n'
+            f'slot_shape = [slot_shape_1, slot_shape_2];\n'
+            f'slot_params = [slot_params_1, slot_params_2];\n'
+            f'slot_pos = [slot_pos_1, slot_pos_2];'
+        )
+
+        updated_scad_content = re.sub(
+            r'/\* \[Finger Slot Options\] \*/.*?slot_pos = \[.*?\];',
+            finger_slot_replacement,
+            updated_scad_content,
+            flags=re.DOTALL
+        )
+
 
         # Add divider parameters (required for gridfinity_cup module)
         divider_params = """
@@ -428,34 +487,18 @@ divider_slot_spanning = false;
         # Build label from filename: cl_420 -> "CL 420"
         label_text = file_name.upper().replace('_', ' ')
 
-        # Add finger scoop cutouts inside the main render difference block
-        # Add finger scoop cutouts
-        finger_scoops = generate_finger_scoops(dxf_path, design_files_directory, gridy_size, splitDXF)
-        updated_scad_content = updated_scad_content.replace(
-            '}\n\n// Conditionally extrude the DXF',
-            finger_scoops + '}\n\n// Conditionally extrude the DXF'
-        )
-
         # Add colored border and text label
-        border_and_text = f"""
-// === Colored border around bin top edge ===
-color("{border_color}")
-translate([0, 0, height[0]*7])
-linear_extrude(height = 2)
-difference() {{
-    offset(r = 3.75)
-        square([width[0]*42 - 0.5 - 7.5, depth[0]*42 - 0.5 - 7.5], center=true);
-    offset(r = 3.75)
-        square([width[0]*42 - 4.5 - 7.5, depth[0]*42 - 4.5 - 7.5], center=true);
-}}
+        # Build label from filename: cl_420 -> "CL 420"
+        label_text = file_name.upper().replace('_', ' ')
 
-// === Tool label text ===
-color("{border_color}")
-translate([width[0]*42/2 - 37, depth[0]*42/2 - 12, height[0]*7])
-linear_extrude(height = 2)
-rotate([0, 0, 180])
-text("{label_text}", size = 7, font = "Arial Rounded MT Bold", halign = "center", valign = "center");
-"""
+        # Add border and text
+        border_params, border_geometry = generate_border_and_text(label_text, border_color)
+        updated_scad_content = updated_scad_content.replace(
+            'module end_of_customizer_opts() {}',
+            border_params + '\nmodule end_of_customizer_opts() {}'
+        )
+        updated_scad_content += border_geometry
+
         updated_scad_content += border_and_text
         with open(scad_file_path, 'w') as scad_file:
             scad_file.write(updated_scad_content)
