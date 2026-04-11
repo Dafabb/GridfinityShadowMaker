@@ -419,25 +419,29 @@ text("{label_text}", size = 7, font = "Arial Rounded MT Bold", halign = "center"
             test_slab_path = scad_file_path.replace('.scad', '_test_slab.scad')
             # Collect all DXF file references
             if splitDXF and isinstance(dxf_path, list):
-                dxf_files = [p.replace("\\\\", "/") for p in dxf_path]
+                dxf_files = [p.replace("\\", "/") for p in dxf_path]
             else:
-                dxf_files = [dxf_path.replace("\\\\", "/")]
-            dxf_cuts = "\\n".join([
-                f'    translate([0, 0, -0.1])\\n        linear_extrude(height = 1.6)\\n            scale([25.4, 25.4])\\n                import("{dxf}");'
+                dxf_files = [dxf_path.replace("\\", "/")]
+            dxf_cuts = "\n".join([
+                f'    translate([0, 0, -0.1])\n'
+                f'        linear_extrude(height = 1.6)\n'
+                f'            scale([25.4, 25.4])\n'
+                f'                import("{dxf}");'
                 for dxf in dxf_files
             ])
-            test_slab_content = f"""// Test slab for fit validation — ~10-15 min print
-// Drop tool onto slab to check pocket fit before full print
-$fa = 6;
-$fs = 0.4;
-difference() {{
-    cube([{gridx_size}*42, {gridy_size}*42, 1.2], center=true);
-{dxf_cuts}
-}}
-"""
+            test_slab_content = (
+                f"// Test slab for fit validation\n"
+                f"// Drop tool onto slab to check pocket fit before full print\n"
+                f"$fa = 6;\n"
+                f"$fs = 0.4;\n\n"
+                f"difference() {{\n"
+                f"    cube([{gridx_size}*42, {gridy_size}*42, 1.2], center=true);\n"
+                f"{dxf_cuts}\n"
+                f"}}\n"
+            )
             with open(test_slab_path, 'w') as test_file:
                 test_file.write(test_slab_content)
-            console_text.setText(console_text.text() + f"\\nTest slab written to: {os.path.basename(test_slab_path)}")
+            console_text.setText(console_text.text() + f"\nTest slab written to: {os.path.basename(test_slab_path)}")
 
             # Generate OpenSCAD Customizer presets JSON
             import json
