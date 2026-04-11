@@ -10,7 +10,7 @@ use <src/gridfinity_shape_cutter.scad>
 shape_data = [[-1.75,0.0,2.6,0.0,1.32,],[-4.75,0.0,2.6,0.0,1.32,],[0.66,0.81,1.22,0.0,1.5,],[0.66,-0.81,1.22,0.0,1.5,],[2.28,0.81,1.22,0.0,1.5,],[2.28,-0.81,1.22,0.0,1.5,]];
 
 // [width, depth, height]
-size = [7, 2, 6]; // .1 
+size = [6, 2, 6]; // .1 
 // [units,mm] units or mm, ex: [2,0] or [0,84]
 width = [size[0], 0]; // .1
 // [units,mm] units or mm, ex: [2,0] or [0,84]
@@ -26,7 +26,7 @@ lip_style = "none";  // [ normal, reduced, reduced_double, minimum, none:not sta
 /* [DXF Options] */
 // DXF file path 
 dxf_file_paths = [
-"cl_420_contour_1.dxf"
+"CL_420_s2_contour_1.dxf"
 ];
 dxf_cut_depths = [10];
 // dxf_file_path replaced by dxf_file_paths
@@ -36,16 +36,31 @@ position = [position_1];
 
 
 
-/* [Finger Slot Options] */
+/* [Finger Slot Options] //legacy
 use_finger_slots = true; // true or false
 slot_shape_1 = "scoop"; // [none, rectangle, oval, scoop, triangle, keyhole, teardrop]
 slot_params_1 = [80, 40, 9, 0]; // length (mm), width (mm), height (mm), rotation (deg)
 slot_pos_1 = [0.000000,0.000000]; // Translation position [x, y] in mm
 slot_shape = [slot_shape_1];
-
 slot_params = [slot_params_1];
-
 slot_pos = [slot_pos_1];
+*/
+
+/* [Finger Slot Options] */
+use_finger_slots = true;
+// Left side finger scoop
+slot_shape_1 = "oval"; // [none, rectangle, oval, scoop, triangle, keyhole, teardrop]
+slot_params_1 = [20, 20, 9, 0]; // length, width, height, rotation
+slot_pos_1 = [-15, 0]; // Left of tool
+
+// Right side finger scoop
+slot_shape_2 = "oval";
+slot_params_2 = [20, 20, 9, 0];
+slot_pos_2 = [15, 0]; // Right of tool
+
+slot_shape = [slot_shape_1, slot_shape_2];
+slot_params = [slot_params_1, slot_params_2];
+slot_pos = [slot_pos_1, slot_pos_2];
 
 
 /* [Section Adjustments] */
@@ -414,19 +429,3 @@ if (include_label) {
         }
     }
 }
-// === Colored border around bin top edge ===
-color("blue")
-translate([0, 0, height[0]*7])
-linear_extrude(height = 2)
-difference() {
-    offset(r = 3.75)
-        square([width[0]*42 - 0.5 - 7.5, depth[0]*42 - 0.5 - 7.5], center=true);
-    offset(r = 3.75)
-        square([width[0]*42 - 4.5 - 7.5, depth[0]*42 - 4.5 - 7.5], center=true);
-}
-// === Tool label text ===
-color("blue")
-translate([110, depth[0]*42/2 - 12, height[0]*7])
-linear_extrude(height = 2)
-rotate([0, 0, 180])
-text("CL 420", size = 7, font = "Arial Rounded MT Bold", halign = "center", valign = "center");

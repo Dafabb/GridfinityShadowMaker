@@ -79,7 +79,7 @@
             "post_cut_depth": "1",
             "section_cut_depth_1": "[20, 15, 10]",
             "section_parameters_1": "[40, 0, 0]",
-            "size": "[7, 2.4, 4]",
+            "size": "[7, 2.4, 2.8]",
             "slot_params_1": "[80, 40, 9, 0]",
             "slot_pos_1": "[0, 0]",
             "slot_shape_1": "scoop",

@@ -10,7 +10,7 @@ use <src/gridfinity_shape_cutter.scad>
 shape_data = [[-1.75,0.0,2.6,0.0,1.32,],[-4.75,0.0,2.6,0.0,1.32,],[0.66,0.81,1.22,0.0,1.5,],[0.66,-0.81,1.22,0.0,1.5,],[2.28,0.81,1.22,0.0,1.5,],[2.28,-0.81,1.22,0.0,1.5,]];
 
 // [width, depth, height]
-size = [7, 2, 6]; // .1 
+size = [8, 2, 6]; // .1 
 // [units,mm] units or mm, ex: [2,0] or [0,84]
 width = [size[0], 0]; // .1
 // [units,mm] units or mm, ex: [2,0] or [0,84]
@@ -26,7 +26,7 @@ lip_style = "none";  // [ normal, reduced, reduced_double, minimum, none:not sta
 /* [DXF Options] */
 // DXF file path 
 dxf_file_paths = [
-"cl_420_contour_1.dxf"
+"cl_442_contour_1.dxf"
 ];
 dxf_cut_depths = [10];
 // dxf_file_path replaced by dxf_file_paths
@@ -424,9 +424,10 @@ difference() {
     offset(r = 3.75)
         square([width[0]*42 - 4.5 - 7.5, depth[0]*42 - 4.5 - 7.5], center=true);
 }
+
 // === Tool label text ===
 color("blue")
-translate([110, depth[0]*42/2 - 12, height[0]*7])
+translate([width[0]*42/2 - 37, depth[0]*42/2 - 12, height[0]*7])
 linear_extrude(height = 2)
 rotate([0, 0, 180])
-text("CL 420", size = 7, font = "Arial Rounded MT Bold", halign = "center", valign = "center");
+text("CL 442", size = 7, font = "Arial Rounded MT Bold", halign = "center", valign = "center");
