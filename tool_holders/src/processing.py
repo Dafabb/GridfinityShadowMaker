@@ -482,13 +482,19 @@ def generate_test_slab(dxf_path, gridx_size, gridy_size, console_text, file_name
             f'                import("{dxf}");'
             for dxf in dxf_files
         ])
+
         test_slab_content = (
             f"// Test slab for fit validation\n"
-            f"// Drop tool onto slab to check pocket fit before full print\n"
-            f"$fa = 6;\n"
-            f"$fs = 0.4;\n\n"
+            f"// Drop tool onto slab to check pocket fit before full print\n\n"
+            f"/* [Slab Settings] */\n"
+            f"// Width in Gridfinity units\n"
+            f"slab_width = {gridx_size}; // [1:0.5:12]\n"
+            f"// Depth in Gridfinity units\n"
+            f"slab_depth = {gridy_size}; // [1:0.5:6]\n"
+            f"// Slab thickness in mm\n"
+            f"slab_height = 1.2; // [0.6:0.2:3.0]\n\n"
             f"difference() {{\n"
-            f"    cube([{gridx_size}*42, {gridy_size}*42, 1.2], center=true);\n"
+            f"    cube([slab_width*42, slab_depth*42, slab_height], center=true);\n"
             f"{dxf_cuts}\n"
             f"}}\n"
         )

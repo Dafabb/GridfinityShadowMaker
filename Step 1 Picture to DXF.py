@@ -62,6 +62,7 @@ def main():
         load_button.setEnabled(bool(ui.lineEdit.text()))  # Enable if lineEdit has text
         ui.captureImage.setEnabled(bool(ui.lineEdit.text()))  # Enable Capture Image button as well
 
+    ui.lineEdit.setText("tool_holders")
     ui.lineEdit.textChanged.connect(toggle_load_button)  # Connect textChanged signal
     toggle_load_button()  # Initial check to set the correct state of load_button
 
@@ -187,7 +188,8 @@ def main():
     ui.SaveDefault.clicked.connect(save_defaults)
     ui.captureImage.clicked.connect(launch_capture_image)
     
-    window.showMaximized()  # Show the main window in maximized view
+    window.resize(1200, 800)
+    window.show()
     app.exec_()
 
 if __name__ == "__main__":
