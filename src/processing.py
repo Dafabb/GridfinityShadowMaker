@@ -282,7 +282,7 @@ def select_image(console_text, default_dir=None):
         print(traceback.format_exc())
         return None, None
 
-def import_to_openscad(dxf_path, gridx_size, gridy_size, console_text, file_name, folder_name, splitDXF=False, border_color="blue", generate_test_slab=True):
+def generate_bin_scad(dxf_path, gridx_size, gridy_size, console_text, file_name, folder_name, splitDXF=False, border_color="blue", generate_test_slab=True):
     try:
         global scad_file_path  # Use the global variable to keep track of the SCAD file
         scad_template_path = os.path.join(os.path.dirname(__file__), "..", "Step 2 DXF to STL.scad")

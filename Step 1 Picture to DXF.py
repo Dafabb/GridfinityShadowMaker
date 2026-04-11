@@ -1,6 +1,6 @@
 from PyQt5 import QtWidgets, QtGui
 from src.ui import Ui_MainWindow # type: ignore
-from src.processing import find_diameter, find_contours, save_contours_as_dxf, select_image, import_to_openscad, generate_test_slab, exit_application, clear_canvas, create_main_window, display_image_on_canvas
+from src.processing import find_diameter, find_contours, save_contours_as_dxf, select_image, generate_bin_scad, generate_test_slab, exit_application, clear_canvas, create_main_window, display_image_on_canvas
 import cv2
 import traceback
 from PIL import Image
@@ -190,7 +190,7 @@ def main():
     load_button.clicked.connect(load_image)
     process_button.clicked.connect(lambda: process_image(splitDXF=ui.splitDXF.isChecked()))
 #    import_button.clicked.connect(lambda: import_to_openscad(import_button.dxf_path, import_button.gridx_size, import_button.gridy_size, console_text, file_name, import_button.folder_name, ui.splitDXF.isChecked(), ui.border_color_combo.currentText(), ui.generateTestSlab.isChecked()))
-    ui.generate_bin_button.clicked.connect(lambda: import_to_openscad(ui.generate_bin_button.dxf_path, ui.generate_bin_button.gridx_size, ui.generate_bin_button.gridy_size, console_text, file_name, ui.generate_bin_button.folder_name, ui.splitDXF.isChecked(), ui.border_color_combo.currentText()))
+    ui.generate_bin_button.clicked.connect(lambda: generate_bin_scad(ui.generate_bin_button.dxf_path, ui.generate_bin_button.gridx_size, ui.generate_bin_button.gridy_size, console_text, file_name, ui.generate_bin_button.folder_name, ui.splitDXF.isChecked(), ui.border_color_combo.currentText()))
     ui.generate_test_button.clicked.connect(lambda: generate_test_slab(ui.generate_test_button.dxf_path, ui.generate_test_button.gridx_size, ui.generate_test_button.gridy_size, console_text, file_name, ui.generate_test_button.folder_name, ui.splitDXF.isChecked()))
     exit_button.clicked.connect(lambda: exit_application(console_text))
     ui.SaveDefault.clicked.connect(save_defaults)
