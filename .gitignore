@@ -32,11 +32,13 @@ Step 2 DXF to STL.json
 sections.json
 /test
 
+# Ignore the created copy of the /src folder in working folder
+tool_holders/src
+
 # Ignore generated contour DXF files across the repo
 # Pattern: *_contour_N.dxf where * is any prefix and N is any number
 # Examples: cl_420_contour_1.dxf, mw_12314_contour_12.dxf, xyz_7_contour_999.dxf
 # Works in any directory or subdirectory
-
 **/*_contour_[0-9]*.dxf
 
 # If you want to be more specific and only match prefixes that look like 

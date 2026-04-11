@@ -76,6 +76,7 @@ def main():
                 return
             design_files_folder = os.path.join(os.path.dirname(__file__), folder_name)
             os.makedirs(design_files_folder, exist_ok=True)
+
             # Copy src folder into the project folder if not already present
             # Overwrite src folder in the project folder even if it already exists
             src_src = os.path.join(os.path.dirname(__file__), "src")
@@ -83,6 +84,7 @@ def main():
             if os.path.exists(dst_src):
                 shutil.rmtree(dst_src)
             shutil.copytree(src_src, dst_src)
+
             # Pass default directory to select_image
             input_image_path, file_name = select_image(console_text, default_dir=design_files_folder)
             if not input_image_path:
@@ -124,6 +126,24 @@ def main():
         try:
             clear_canvas(canvas, keep_original=True)
             console_text.setText(f"Processing image.")
+
+            # Measure DXF bounding box
+            try:
+                import ezdxf
+                folder = os.path.join(os.path.dirname(__file__), folder_name)
+                if splitDXF and isinstance(dxf_path, list):
+                    measure_file = os.path.join(folder, os.path.basename(dxf_path[0]))
+                else:
+                    measure_file = os.path.join(folder, os.path.basename(dxf_path))
+                doc = ezdxf.readfile(measure_file)
+                msp = doc.modelspace()
+                pts = [p for e in msp for p in e.get_points()]
+                length_mm = (max(p[0] for p in pts) - min(p[0] for p in pts)) * 25.4
+                width_mm = (max(p[1] for p in pts) - min(p[1] for p in pts)) * 25.4
+                console_text.setText(f"Grid: {gridx_size} x {gridy_size}\nCutout: {length_mm:.1f}mm x {width_mm:.1f}mm")
+            except Exception as e:
+                console_text.setText(f"Grid: {gridx_size} x {gridy_size}\nMeasure error: {e}")
+                
             folder_name = ui.lineEdit.text().strip()  # Get folder name from lineEdit
             if not folder_name:
                 console_text.setText("Project name is empty. Please enter a valid name.")
