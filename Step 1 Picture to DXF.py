@@ -139,6 +139,10 @@ def main():
             if splitDXF is None:
                 splitDXF = ui.splitDXF.isChecked()
             dxf_path, gridx_size, gridy_size = save_contours_as_dxf(contours, file_name, float(token_entry.text()) / diameter, console_text, folder_name, splitDXF=splitDXF)
+
+            scale_factor = float(token_entry.text()) / diameter
+            console_text.setText(f"Grid: {gridx_size} x {gridy_size} | Token diameter: {diameter:.1f}px | Scale: {scale_factor:.6f}")
+
             console_text.setText(f"Processing image\nGrid X Size: {gridx_size}, Grid Y Size: {gridy_size}")
 #            import_button.setEnabled(True)
 #            import_button.dxf_path = dxf_path

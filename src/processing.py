@@ -68,6 +68,22 @@ def find_diameter(image, canvas, threshold_entry, offset_entry, token_entry, res
         print(traceback.format_exc())
         return None, None
 
+def measure_dxf_bounding_box(dxf_path, folder_path, splitDXF=False):
+    """Measure DXF cutout dimensions in mm. Returns 'Length x Width' string or empty."""
+    try:
+        if splitDXF and isinstance(dxf_path, list):
+            measure_file = os.path.join(folder_path, os.path.basename(dxf_path[0]))
+        else:
+            measure_file = os.path.join(folder_path, os.path.basename(dxf_path))
+        doc = ezdxf.readfile(measure_file)
+        msp = doc.modelspace()
+        pts = [p for e in msp for p in e.get_points()]
+        length_mm = (max(p[0] for p in pts) - min(p[0] for p in pts)) * 25.4
+        width_mm = (max(p[1] for p in pts) - min(p[1] for p in pts)) * 25.4
+        return f"\nCutout: {length_mm:.1f}mm x {width_mm:.1f}mm"
+    except Exception:
+        return ""
+
 def preprocess_image(image, threshold_input):
     if isinstance(image, str):
         image = cv2.imread(image)
@@ -456,7 +472,10 @@ text("{label_text}", size = 7, font = "Arial Rounded MT Bold", halign = "center"
 #        
 #        # Open the SCAD file with OpenSCAD
 #        subprocess.Popen([openscad_executable, scad_file_path])
-        console_text.setText(f"Bin SCAD written to: {os.path.basename(scad_file_path)}")
+
+        # Measure DXF bounding box
+        dim_text = measure_dxf_bounding_box(dxf_path, design_files_directory, splitDXF)
+        console_text.setText(f"Bin SCAD written to: {os.path.basename(scad_file_path)}{dim_text}")
 
     except Exception as e:
         console_text.setText(f"Error importing to OpenSCAD: {str(e)}")
@@ -499,7 +518,11 @@ def generate_test_slab(dxf_path, gridx_size, gridy_size, console_text, file_name
 
         with open(test_slab_path, 'w') as test_file:
             test_file.write(test_slab_content)
-        console_text.setText(f"Test slab written to: {os.path.basename(test_slab_path)}")
+
+        # Measure DXF bounding box
+        dim_text = measure_dxf_bounding_box(dxf_path, design_files_directory, splitDXF)
+        console_text.setText(f"Test slab written to: {os.path.basename(test_slab_path)}{dim_text}")
+ 
     except Exception as e:
         console_text.setText(f"Error generating test slab: {str(e)}")
         print(traceback.format_exc())
