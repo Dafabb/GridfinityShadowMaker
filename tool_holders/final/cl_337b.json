@@ -1,0 +1,22 @@
+{
+  "parameterSets": {
+    "standard": {
+      "size": "[5, 2, 2.8]",
+      "use_chamfered_extrude": "false",
+      "lip_style": "none",
+      "use_finger_slots": "false",
+      "use_section_cut": "false",
+      "add_shape_data": "false",
+      "half_pitch": "false",
+      "enable_magnets": "false",
+      "include_post": "false",
+      "include_cutout": "false",
+      "include_label": "false",
+      "text_1": "false",
+      "text_2": "false",
+      "filled_in": "enabled",
+      "render_position": "center"
+    }
+  },
+  "fileFormatVersion": "1"
+}
