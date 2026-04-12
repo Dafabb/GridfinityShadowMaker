@@ -4,24 +4,24 @@ import math
 import ezdxf
 import pyperclip
 import os
+import re
+import json
+import pickle
 import tempfile
 import subprocess
 import traceback
 import time
 import concurrent.futures
 from PIL import Image
-from PyQt5 import QtWidgets, QtGui  # Import QtGui
-from src.ui import Ui_MainWindow  # type: ignore # Import Ui_MainWindow
+from PyQt5 import QtWidgets, QtGui
+from src.ui import Ui_MainWindow  # type: ignore
 
-scad_file_path = None  # Declare scad_file_path as a global variable
+scad_file_path = None
 
-def get_threshold_input(threshold_entry, offset_entry, token_entry, resolution_entry):
-    global offset, token, resolution
-    threshold_input = validate_input(threshold_entry.text(), 110, 0, 255)
-    offset = validate_input(offset_entry.text(), 0.1)
-    token = validate_input(token_entry.text(), 2.000)
-    resolution = validate_input(resolution_entry.text(), 10)
-    return threshold_input
+
+# ============================================================
+# Utility Functions
+# ============================================================
 
 def validate_input(value, default, min_val=None, max_val=None):
     try:
@@ -34,6 +34,20 @@ def validate_input(value, default, min_val=None, max_val=None):
         value = default
     return value
 
+
+def get_threshold_input(threshold_entry, offset_entry, token_entry, resolution_entry):
+    global offset, token, resolution
+    threshold_input = validate_input(threshold_entry.text(), 110, 0, 255)
+    offset = validate_input(offset_entry.text(), 0.1)
+    token = validate_input(token_entry.text(), 2.000)
+    resolution = validate_input(resolution_entry.text(), 10)
+    return threshold_input
+
+
+# ============================================================
+# Image Processing & Display
+# ============================================================
+
 def clear_canvas(canvas, keep_original=False):
     try:
         canvas.scene().clear()
@@ -45,13 +59,89 @@ def clear_canvas(canvas, keep_original=False):
         print(f"Error clearing canvas: {str(e)}")
         print(traceback.format_exc())
 
+
+def preprocess_image(image, threshold_input):
+    if isinstance(image, str):
+        image = cv2.imread(image)
+    imgray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    ret, thresh = cv2.threshold(imgray, threshold_input, 255, cv2.THRESH_BINARY)
+    thresh = cv2.bitwise_not(thresh)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+    return image, thresh
+
+
+def find_max_p2d_ratio_contour(contours):
+    max_p2d_ratio = 0
+    max_p2d_contour = None
+    for contour in contours:
+        perimeter = cv2.arcLength(contour, True)
+        diameter = calculate_diameter(contour)
+        if diameter == 0:
+            continue
+        p2d_ratio = perimeter / diameter
+        if p2d_ratio > max_p2d_ratio:
+            max_p2d_ratio = p2d_ratio
+            max_p2d_contour = contour
+    return max_p2d_contour, max_p2d_ratio
+
+
+def calculate_diameter(contour):
+    (x, y), radius = cv2.minEnclosingCircle(contour)
+    return 2 * radius
+
+
+def display_contours(image, contours, canvas, region, caption, color):
+    contours_img = image.copy()
+    thickness = max(1, min(image.shape[0], image.shape[1]) // 200)
+    cv2.drawContours(contours_img, contours, -1, color, thickness)
+    display_image_on_canvas(contours_img, canvas, region, caption)
+
+
+def display_image_on_canvas(image, canvas, region, caption):
+    try:
+        img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(img)
+
+        canvas_width = canvas.width() // 3
+        canvas_height = canvas.height() - 50
+
+        scale_factor = min(canvas_width / img.width, canvas_height / img.height)
+        new_width = int(img.width * scale_factor)
+        new_height = int(img.height * scale_factor)
+
+        img = img.resize((new_width, new_height), Image.LANCZOS)
+
+        img_data = img.tobytes()
+        bytes_per_line = new_width * 3
+        qimage = QtGui.QImage(img_data, new_width, new_height, bytes_per_line, QtGui.QImage.Format_RGB888)
+        pixmap = QtGui.QPixmap.fromImage(qimage)
+
+        if region == 1:
+            x_offset = canvas.width() // 6
+            canvas.image1 = pixmap
+        elif region == 2:
+            x_offset = canvas_width
+            canvas.image2 = pixmap
+        elif region == 3:
+            x_offset = 2 * canvas_width
+            canvas.image3 = pixmap
+        canvas.scene().addPixmap(pixmap).setPos(x_offset, 0)
+        canvas.scene().addText(caption, QtGui.QFont("Helvetica", 16)).setPos(x_offset + canvas_width // 2, 5)
+
+        canvas.update()
+    except Exception as e:
+        print(f"Error displaying image on canvas: {str(e)}")
+        print(traceback.format_exc())
+
+
 def find_diameter(image, canvas, threshold_entry, offset_entry, token_entry, resolution_entry, console_text):
     try:
-        diameter = None  # Initialize diameter
+        diameter = None
         threshold_input = get_threshold_input(threshold_entry, offset_entry, token_entry, resolution_entry)
         image, thresh = preprocess_image(image, threshold_input)
         display_image_on_canvas(thresh, canvas, 2, "Traced")
-        
+
         contours = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[-2]
 
         max_p2d_contour, max_p2d_ratio = find_max_p2d_ratio_contour(contours)
@@ -59,7 +149,7 @@ def find_diameter(image, canvas, threshold_entry, offset_entry, token_entry, res
             diameter = calculate_diameter(max_p2d_contour)
             console_text.setText(f"Circle with Greatest Perimeter to Diameter Ratio - Diameter: {diameter}, Ratio: {max_p2d_ratio}")
             filtered_contours = [contour for contour in contours if not np.array_equal(contour, max_p2d_contour)]
-            display_contours(image, filtered_contours, canvas, 2, "Traced", (0, 255, 0))  # Green color for traced image
+            display_contours(image, filtered_contours, canvas, 2, "Traced", (0, 255, 0))
         else:
             console_text.setText("No circle with sufficient perimeter to diameter ratio found.")
         return diameter, threshold_input
@@ -67,6 +157,161 @@ def find_diameter(image, canvas, threshold_entry, offset_entry, token_entry, res
         console_text.setText(f"Error finding diameter: {str(e)}")
         print(traceback.format_exc())
         return None, None
+
+
+def find_contours(image, diameter, threshold_input, canvas, console_text):
+    try:
+        image, thresh = preprocess_image(image, threshold_input)
+        kernel_size = math.ceil(diameter / (token / offset) * 2)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+        thresh = cv2.dilate(thresh, kernel)
+        epsilon = kernel_size / resolution
+
+        contours_tuple = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[-2]
+        contours = [cv2.approxPolyDP(contour, epsilon, True) for contour in contours_tuple]
+
+        max_p2d_contour, max_p2d_ratio = find_max_p2d_ratio_contour(contours)
+        filtered_contours = [contour for contour in contours if not np.array_equal(contour, max_p2d_contour)]
+        display_contours(image, filtered_contours, canvas, 3, "Offset", (255, 0, 0))
+
+        if max_p2d_contour is not None:
+            diameter = calculate_diameter(max_p2d_contour)
+            console_text.setText(f"Circle with Greatest Perimeter to Diameter Ratio - Diameter: {diameter}, Ratio: {max_p2d_ratio}")
+        else:
+            console_text.setText("No circle with sufficient perimeter to diameter ratio found.")
+
+        return contours, image
+    except Exception as e:
+        console_text.setText(f"Error finding contours: {str(e)}")
+        print(traceback.format_exc())
+        return None, None
+
+
+# ============================================================
+# DXF Functions
+# ============================================================
+
+def save_dxf_file(doc, file_name, folder_name):
+    script_directory = os.path.dirname(os.path.abspath(__file__))
+    design_files_directory = os.path.join(script_directory, "..", folder_name)
+    os.makedirs(design_files_directory, exist_ok=True)
+    output_path = os.path.join(design_files_directory, file_name + ".dxf")
+    doc.saveas(output_path)
+    return file_name + ".dxf"
+
+
+def save_single_dxf(contour, scale_factor, pos_xy, file_name, idx, folder_name):
+    center_y, center_x = pos_xy
+    doc = ezdxf.new()
+    msp = doc.modelspace()
+    points = [
+        (point[0][1] * scale_factor - center_y * scale_factor,
+         point[0][0] * scale_factor - center_x * scale_factor)
+        for point in contour
+    ]
+    if points[0] != points[-1]:
+        points.append((points[0][0], points[0][1]))
+    msp.add_lwpolyline(points)
+    single_name = f"{file_name}_contour_{idx+1}"
+    output_path = save_dxf_file(doc, single_name, folder_name)
+    return output_path
+
+
+def calculate_grid_size(contours, scale_factor):
+    all_points = np.vstack([contour.reshape(-1, 2) for contour in contours])
+    min_x, min_y = np.min(all_points, axis=0)
+    max_x, max_y = np.max(all_points, axis=0)
+    x_size = max_x - min_x
+    y_size = max_y - min_y
+    gridy_size = math.ceil(x_size / 42 * scale_factor * 25.4)
+    gridx_size = math.ceil(y_size / 42 * scale_factor * 25.4)
+    return gridx_size, gridy_size
+
+
+def save_contours_as_dxf(contours, file_name, scale_factor, console_text, folder_name, splitDXF=False):
+    try:
+        max_p2d_contour, max_p2d_ratio = find_max_p2d_ratio_contour(contours)
+        if max_p2d_contour is None:
+            console_text.setText("No valid contours found.")
+            return None, None, None
+
+        filtered_contours = [contour for contour in contours if not np.array_equal(contour, max_p2d_contour)]
+        filtered_contours = [contour for contour in filtered_contours if cv2.contourArea(contour) >= 1000]
+        if not filtered_contours:
+            console_text.setText("No valid contours found after filtering.")
+            return None, None, None
+
+        pos_xy = []
+        for contour in filtered_contours:
+            all_points = np.vstack(contour.reshape(-1, 2))
+            min_x, min_y = np.min(all_points, axis=0)
+            max_x, max_y = np.max(all_points, axis=0)
+            center_y = round((min_x + max_x) / 2, 1)
+            center_x = round((min_y + max_y) / 2, 1)
+            pos_xy.append([center_x, center_y])
+
+        # Calculate bounding box for consistent origin
+        all_points = np.vstack([contour.reshape(-1, 2) for contour in filtered_contours])
+        min_x, min_y = np.min(all_points, axis=0)
+        max_x, max_y = np.max(all_points, axis=0)
+        abs_center_x = (min_x + max_x) / 2
+        abs_center_y = (min_y + max_y) / 2
+
+        offset_pos_xy = []
+        for contour in filtered_contours:
+            all_points = np.vstack(contour.reshape(-1, 2))
+            min_x, min_y = np.min(all_points, axis=0)
+            max_x, max_y = np.max(all_points, axis=0)
+            center_y = round(((min_x + max_x) / 2 - abs_center_x) * scale_factor * 25.4, 1)
+            center_x = round(((min_y + max_y) / 2 - abs_center_y) * scale_factor * 25.4, 1)
+            offset_pos_xy.append([center_x, center_y])
+
+        # Save offset positions for SCAD generation
+        try:
+            temp_centers_path = os.path.join(os.path.dirname(__file__), '..', 'offset_pos_xy.pkl')
+            with open(temp_centers_path, 'wb') as f:
+                pickle.dump(offset_pos_xy, f)
+        except Exception as e:
+            print(f"Warning: Could not save offset_pos_xy for OpenSCAD import: {e}")
+
+        if splitDXF:
+            output_paths = []
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                futures = [
+                    executor.submit(save_single_dxf, contour, scale_factor, pos_xy[idx], file_name, idx, folder_name)
+                    for idx, contour in enumerate(filtered_contours)
+                ]
+                for future in concurrent.futures.as_completed(futures):
+                    output_paths.append(future.result())
+            gridx_size, gridy_size = calculate_grid_size(filtered_contours, scale_factor)
+            console_text.setText(f"Saved {len(output_paths)} DXF files: {output_paths}")
+            return output_paths, gridx_size, gridy_size
+        else:
+            doc = ezdxf.new()
+            msp = doc.modelspace()
+            for contour in filtered_contours:
+                points = [
+                    (point[0][1] * scale_factor - center_y * scale_factor,
+                     point[0][0] * scale_factor - center_x * scale_factor)
+                    for point in contour
+                ]
+                if points[0] != points[-1]:
+                    points.append((points[0][0], points[0][1]))
+                msp.add_lwpolyline(points)
+            output_path = save_dxf_file(doc, file_name, folder_name)
+            gridx_size, gridy_size = calculate_grid_size(filtered_contours, scale_factor)
+            pyperclip.copy(output_path)
+            console_text.setText(
+                f"File saved successfully: {output_path}\n"
+                f"File path '{output_path}' copied to clipboard.\n"
+                f"Grid X Size: {gridx_size}, Grid Y Size: {gridy_size}"
+            )
+            return output_path, gridx_size, gridy_size
+    except Exception as e:
+        console_text.setText(f"Error saving DXF: {str(e)}")
+        print(traceback.format_exc())
+        return None, None, None
+
 
 def measure_dxf_bounding_box(dxf_path, folder_path, splitDXF=False):
     """Measure DXF cutout dimensions in mm. Returns 'Length x Width' string or empty."""
@@ -83,6 +328,7 @@ def measure_dxf_bounding_box(dxf_path, folder_path, splitDXF=False):
         return f"\nCutout: {length_mm:.1f}mm x {width_mm:.1f}mm"
     except Exception:
         return ""
+
 
 def calculate_scoop_positions(dxf_path, folder_path, gridy_size, splitDXF=False):
     """Calculate Y positions for finger scoops from DXF tool outline edges."""
@@ -102,8 +348,188 @@ def calculate_scoop_positions(dxf_path, folder_path, gridy_size, splitDXF=False)
         pass
     return scoop_y_pos, scoop_y_neg
 
+
+# ============================================================
+# SCAD Generation — Injection Helpers
+# ============================================================
+
+def load_scad_template():
+    """Load the base SCAD template file."""
+    template_path = os.path.join(os.path.dirname(__file__), "..", "Step 2 DXF to STL.scad")
+    with open(template_path, 'r') as f:
+        return f.read()
+
+
+def inject_general_settings(scad, gridx, gridy, height=2.8, splitDXF=False):
+    """Inject size, chamfer disable, and multiple_dxf flag."""
+    scad = scad.replace('size = [5, 2, 6];', f'size = [{gridx}, {gridy}, {height}];')
+    scad = scad.replace('multiple_dxf = false;', f'multiple_dxf = {str(splitDXF).lower()};')
+    scad = scad.replace('use_chamfered_extrude = true;', 'use_chamfered_extrude = false;')
+    return scad
+
+
+def _load_offset_positions(num_files):
+    """Load contour center positions from temp pickle file."""
+    try:
+        temp_path = os.path.join(os.path.dirname(__file__), '..', 'offset_pos_xy.pkl')
+        if os.path.exists(temp_path):
+            with open(temp_path, 'rb') as f:
+                pos_xy = pickle.load(f)
+            if len(pos_xy) == num_files:
+                return pos_xy
+    except Exception:
+        pass
+    return [[0, 0] for _ in range(num_files)]
+
+
+def inject_dxf_options(scad, dxf_path, splitDXF=False):
+    """Inject DXF file paths, cut depths, positions, and section adjustments."""
+    if splitDXF and isinstance(dxf_path, list):
+        return _inject_dxf_split(scad, dxf_path)
+    else:
+        dxf_path = dxf_path.replace("\\", "/")
+        return scad.replace(
+            'dxf_file_path = "examples/example.dxf";',
+            f'dxf_file_path = "{dxf_path}";'
+        )
+
+
+def _inject_dxf_split(scad, dxf_paths):
+    """Handle split DXF injection for multi-contour tools."""
+    dxf_file_paths = [p.replace("\\", "/") for p in dxf_paths]
+
+    # Sort by contour index
+    def contour_index(path):
+        m = re.search(r'_contour_(\d+)\.dxf$', os.path.basename(path))
+        return int(m.group(1)) if m else 0
+    dxf_file_paths.sort(key=contour_index)
+
+    num_files = len(dxf_file_paths)
+
+    # --- DXF file paths ---
+    dxf_paths_scad = (
+        'dxf_file_paths = [\n'
+        + ',\n'.join([f'"{p}"' for p in dxf_file_paths])
+        + '\n];\n'
+    )
+
+    # --- Cut depths (chunked into arrays of 4 for OpenSCAD limits) ---
+    cut_depths = ["10"] * num_files
+    cut_depth_arrays = [cut_depths[i:i+4] for i in range(0, len(cut_depths), 4)]
+    dxf_cut_depths_scad = ""
+    concat_line = ""
+    if len(cut_depth_arrays) == 1:
+        dxf_cut_depths_scad = f"dxf_cut_depths = [{', '.join(cut_depth_arrays[0])}];\n"
+    else:
+        array_names = []
+        for idx, arr in enumerate(cut_depth_arrays):
+            name = f'dxf_cut_depths_{idx+1}'
+            array_names.append(name)
+            dxf_cut_depths_scad += f"{name} = [{', '.join(arr)}];\n"
+        concat_line = f"dxf_cut_depths = concat({', '.join(array_names)});\n"
+
+    # --- Section blocks ---
+    section_cut_depth_names = []
+    section_param_names = []
+    section_blocks = []
+    for idx in range(num_files):
+        cut_name = f'section_cut_depth_{idx+1}'
+        param_name = f'section_parameters_{idx+1}'
+        section_cut_depth_names.append(cut_name)
+        section_param_names.append(param_name)
+        section_blocks.append(f'{cut_name} = [20, 15, 10];\n{param_name} = [40, 0, 0];')
+    section_cut_depth_concat = f"section_cut_depth = [{', '.join(section_cut_depth_names)}];\n"
+    section_parameters_concat = f"section_parameters = [{', '.join(section_param_names)}];\n"
+
+    # --- Positions from pickle ---
+    pos_xy = _load_offset_positions(num_files)
+    position_lines = []
+    for idx in range(num_files):
+        position_lines.append(
+            f'position_{idx+1} = [{pos_xy[idx][0]:.6f},{pos_xy[idx][1]:.6f},0]; // .1'
+        )
+    position_array = f"position = [{', '.join([f'position_{i+1}' for i in range(num_files)])}];\n"
+
+    # --- Apply replacements ---
+    scad = scad.replace(
+        'position = [[0, 0, 0]]; // .1',
+        '\n'.join(position_lines) + '\n' + position_array
+    )
+
+    scad_block = (
+        dxf_paths_scad + dxf_cut_depths_scad + concat_line
+        + '// dxf_file_path replaced by dxf_file_paths'
+    )
+    scad = scad.replace('dxf_file_path = "examples/example.dxf";', scad_block)
+
+    section_marker = '/* [Section Adjustments] */'
+    if section_marker in scad:
+        parts = scad.split(section_marker, 1)
+        new_block = '\nuse_section_cut = false; // true or false\n'
+        for block in section_blocks:
+            new_block += block + '\n'
+        new_block += section_cut_depth_concat + section_parameters_concat
+        scad = parts[0] + section_marker + new_block + parts[1]
+
+    return scad
+
+
+def inject_finger_scoops(scad, dxf_path, folder_path, gridy_size, splitDXF=False):
+    """Inject finger scoop parameters using built-in finger slot system.
+
+    Positions are calculated from the DXF tool outline edges so scoops sit
+    at the actual tool boundary, not the bin boundary.
+
+    NOTE: For splitDXF, this overwrites any per-contour finger slots from
+    _inject_dxf_split. TODO: Support per-contour scoops for split DXF.
+    """
+    scoop_y_pos, scoop_y_neg = calculate_scoop_positions(
+        dxf_path, folder_path, gridy_size, splitDXF
+    )
+    replacement = (
+        f'/* [Finger Slot Options] */\n'
+        f'use_finger_slots = true; // true or false\n'
+        f'scoop_diameter = 20; // [10:1:40]\n'
+        f'scoop_depth = 10; // [5:1:30]\n'
+        f'slot_shape_1 = "oval"; // [none, rectangle, oval, scoop, triangle, keyhole, teardrop]\n'
+        f'slot_params_1 = [scoop_diameter, scoop_diameter, scoop_depth, 0]; // length, width, height, rotation\n'
+        f'slot_pos_1 = [0, {scoop_y_pos:.1f}]; // [x, y] in mm\n'
+        f'slot_shape_2 = "oval"; // [none, rectangle, oval, scoop, triangle, keyhole, teardrop]\n'
+        f'slot_params_2 = [scoop_diameter, scoop_diameter, scoop_depth, 0];\n'
+        f'slot_pos_2 = [0, -{scoop_y_neg:.1f}];\n'
+        f'slot_shape = [slot_shape_1, slot_shape_2];\n'
+        f'slot_params = [slot_params_1, slot_params_2];\n'
+        f'slot_pos = [slot_pos_1, slot_pos_2];'
+    )
+    scad = re.sub(
+        r'/\* \[Finger Slot Options\] \*/.*?slot_pos = \[.*?\];',
+        replacement, scad, flags=re.DOTALL
+    )
+    return scad
+
+
+def inject_divider_params(scad):
+    """Add divider parameters required for gridfinity_cup module."""
+    divider_params = (
+        '\ndivider_walls_enabled = false;\n'
+        'divider_walls = 0;\n'
+        'divider_headroom = 0;\n'
+        'divider_walls_support_thickness = 0;\n'
+        'divider_wall_slot_size = 0;\n'
+        'divider_walls_spacing = 0;\n'
+        'divider_walls_thickness = 0;\n'
+        'divider_clearance = 0;\n'
+        'divider_slot_spanning = false;\n'
+    )
+    return scad.replace('text_font = "Aldo";', 'text_font = "Aldo";\n' + divider_params)
+
+
 def generate_border_and_text(label_text, border_color="blue", gridx=6, gridy=2):
-    """Generate border/text parameters and geometry for SCAD injection."""
+    """Generate border/text Customizer parameters and SCAD geometry.
+
+    Returns (params_str, geometry_str) — params go before end_of_customizer_opts,
+    geometry gets appended at end of file.
+    """
     text_x = gridx * 42 / 2 - 37
     text_y = gridy * 42 / 2 - 12
     params = (
@@ -141,428 +567,107 @@ if (text_enabled) {{
 """
     return params, geometry
 
-def preprocess_image(image, threshold_input):
-    if isinstance(image, str):
-        image = cv2.imread(image)
-    imgray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    ret, thresh = cv2.threshold(imgray, threshold_input, 255, cv2.THRESH_BINARY)
-    thresh = cv2.bitwise_not(thresh)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
-    return image, thresh
 
-def display_contours(image, contours, canvas, region, caption, color):
-    contours_img = image.copy()
-    # Determine the thickness based on the image size
-    thickness = max(1, min(image.shape[0], image.shape[1]) // 200)
-    cv2.drawContours(contours_img, contours, -1, color, thickness)
-    display_image_on_canvas(contours_img, canvas, region, caption)
+def inject_border_and_text(scad, label_text, border_color, gridx, gridy):
+    """Inject border/text params into Customizer and append geometry."""
+    params, geometry = generate_border_and_text(label_text, border_color, gridx, gridy)
+    scad = scad.replace(
+        'module end_of_customizer_opts() {}',
+        params + '\nmodule end_of_customizer_opts() {}'
+    )
+    scad += geometry
+    return scad
 
-def find_max_p2d_ratio_contour(contours):
-    max_p2d_ratio = 0
-    max_p2d_contour = None
-    for contour in contours:
-        perimeter = cv2.arcLength(contour, True)
-        diameter = calculate_diameter(contour)
-        if diameter == 0:
-            continue  # Skip this contour if diameter is zero
-        p2d_ratio = perimeter / diameter
-        #print(f"Contour Perimeter: {perimeter}, Diameter: {diameter}, Ratio: {p2d_ratio}")
-        if p2d_ratio > max_p2d_ratio:
-            max_p2d_ratio = p2d_ratio
-            max_p2d_contour = contour
-    return max_p2d_contour, max_p2d_ratio
 
-def calculate_diameter(contour):
-    (x, y), radius = cv2.minEnclosingCircle(contour)
-    return 2 * radius
+def write_presets_json(scad_file_path, gridx, gridy):
+    """Write OpenSCAD Customizer presets JSON alongside SCAD file."""
+    presets_path = scad_file_path.replace('.scad', '.json')
+    presets = {
+        "parameterSets": {
+            "standard": {
+                "size": f"[{gridx}, {gridy}, 2.8]",
+                "use_chamfered_extrude": "false",
+                "lip_style": "none",
+                "use_finger_slots": "false",
+                "use_section_cut": "false",
+                "add_shape_data": "false",
+                "half_pitch": "false",
+                "enable_magnets": "false",
+                "include_post": "false",
+                "include_cutout": "false",
+                "include_label": "false",
+                "text_1": "false",
+                "text_2": "false",
+                "filled_in": "enabled",
+                "render_position": "center"
+            }
+        },
+        "fileFormatVersion": "1"
+    }
+    with open(presets_path, 'w') as f:
+        json.dump(presets, f, indent=2)
 
-def find_contours(image, diameter, threshold_input, canvas, console_text):
+
+# ============================================================
+# SCAD Generation — Main Assemblers
+# ============================================================
+def generate_bin_scad(dxf_path, gridx_size, gridy_size, console_text, file_name,
+                      folder_name, splitDXF=False, border_color="blue",
+                      generate_test_slab=True):
+    """Assemble a Gridfinity bin SCAD file from template + injected sections.
+
+    Pipeline:
+        load template
+        → inject_general_settings   (size, chamfer, multiple_dxf)
+        → inject_dxf_options         (file paths, positions, sections)
+        → inject_finger_scoops       (oval scoops at tool outline edges)
+        → inject_divider_params      (required module params)
+        → inject_border_and_text     (colored border + label in Customizer)
+        → write .scad + .json
+    """
     try:
-        image, thresh = preprocess_image(image, threshold_input)
-        kernel_size = math.ceil(diameter / (token / offset) * 2)
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
-        thresh = cv2.dilate(thresh, kernel)
-        epsilon = kernel_size / resolution
+        global scad_file_path
 
-        contours_tuple = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)[-2]
-        contours = [cv2.approxPolyDP(contour, epsilon, True) for contour in contours_tuple]
-
-        max_p2d_contour, max_p2d_ratio = find_max_p2d_ratio_contour(contours)
-        filtered_contours = [contour for contour in contours if not np.array_equal(contour, max_p2d_contour)]
-        display_contours(image, filtered_contours, canvas, 3, "Offset", (255, 0, 0))  # Blue color for filtered contours
-
-        if max_p2d_contour is not None:
-            diameter = calculate_diameter(max_p2d_contour)
-            console_text.setText(f"Circle with Greatest Perimeter to Diameter Ratio - Diameter: {diameter}, Ratio: {max_p2d_ratio}")
-        else:
-            console_text.setText("No circle with sufficient perimeter to diameter ratio found.")
-
-        return contours, image
-    except Exception as e:
-        console_text.setText(f"Error finding contours: {str(e)}")
-        print(traceback.format_exc())
-        return None, None
-
-def save_dxf_file(doc, file_name, folder_name):
-    script_directory = os.path.dirname(os.path.abspath(__file__))
-    design_files_directory = os.path.join(script_directory, "..", folder_name)
-    os.makedirs(design_files_directory, exist_ok=True)
-    output_path = os.path.join(design_files_directory, file_name + ".dxf")
-    doc.saveas(output_path)
-    return file_name + ".dxf"
-
-def save_contours_as_dxf(contours, file_name, scale_factor, console_text, folder_name, splitDXF=False):
-    try:
-        max_p2d_contour, max_p2d_ratio = find_max_p2d_ratio_contour(contours)
-        if max_p2d_contour is None:
-            console_text.setText("No valid contours found.")
-            return None, None, None
-
-        filtered_contours = [contour for contour in contours if not np.array_equal(contour, max_p2d_contour)]
-        # Filter out small contours (area < 1000)
-        filtered_contours = [contour for contour in filtered_contours if cv2.contourArea(contour) >= 1000]
-        if not filtered_contours:
-            console_text.setText("No valid contours found after filtering.")
-            return None, None, None
-        pos_xy = []
-        for contour in filtered_contours:
-            all_points = np.vstack(contour.reshape(-1, 2))
-            min_x, min_y = np.min(all_points, axis=0)
-            max_x, max_y = np.max(all_points, axis=0)
-            center_y = round((min_x + max_x) / 2 ,1)
-            center_x = round((min_y + max_y) / 2 ,1)
-            pos_xy.append([center_x, center_y])
-
-        # Calculate the bounding box for the remaining contours (for consistent origin)
-        all_points = np.vstack([contour.reshape(-1, 2) for contour in filtered_contours])
-        min_x, min_y = np.min(all_points, axis=0)
-        max_x, max_y = np.max(all_points, axis=0)
-        abs_center_x = (min_x + max_x) / 2
-        abs_center_y = (min_y + max_y) / 2
-        offset_pos_xy = []
-        for contour in filtered_contours:
-            all_points = np.vstack(contour.reshape(-1, 2))
-            min_x, min_y = np.min(all_points, axis=0)
-            max_x, max_y = np.max(all_points, axis=0)
-            center_y = round(((min_x + max_x) / 2 - abs_center_x) * scale_factor * 25.4,1)
-            center_x = round(((min_y + max_y) / 2 - abs_center_y) * scale_factor * 25.4,1)
-            offset_pos_xy.append([center_x, center_y])
-        # Save offset_pos_xy to a temp file for use in import_to_openscad
-        try:
-            import pickle
-            temp_centers_path = os.path.join(os.path.dirname(__file__), '..', 'offset_pos_xy.pkl')
-            with open(temp_centers_path, 'wb') as f:
-                pickle.dump(offset_pos_xy, f)
-        except Exception as e:
-            print(f"Warning: Could not save offset_pos_xy for OpenSCAD import: {e}")
-        if splitDXF:
-            output_paths = []
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                futures = [
-                    executor.submit(save_single_dxf, contour, scale_factor, pos_xy[idx], file_name, idx, folder_name)
-                    for idx, contour in enumerate(filtered_contours)
-                ]
-                for future in concurrent.futures.as_completed(futures):
-                    output_paths.append(future.result())
-            gridx_size, gridy_size = calculate_grid_size(filtered_contours, scale_factor)
-            console_text.setText(f"Saved {len(output_paths)} DXF files: {output_paths}")
-            return output_paths, gridx_size, gridy_size
-        else:
-            doc = ezdxf.new()
-            msp = doc.modelspace()
-            for contour in filtered_contours:
-                points = [(point[0][1] * scale_factor - center_y * scale_factor, point[0][0] * scale_factor - center_x * scale_factor) for point in contour]
-                if points[0] != points[-1]:
-                    points.append((points[0][0], points[0][1]))
-                msp.add_lwpolyline(points)
-            output_path = save_dxf_file(doc, file_name, folder_name)
-            gridx_size, gridy_size = calculate_grid_size(filtered_contours, scale_factor)
-            pyperclip.copy(output_path)
-            console_text.setText(f"File saved successfully: {output_path}\nFile path '{output_path}' copied to clipboard.\nGrid X Size: {gridx_size}, Grid Y Size: {gridy_size}")
-            
-        
-
-            return output_path, gridx_size, gridy_size
-    except Exception as e:
-        console_text.setText(f"Error saving DXF: {str(e)}")
-        print(traceback.format_exc())
-        return None, None, None
-
-def calculate_grid_size(contours, scale_factor):
-    all_points = np.vstack([contour.reshape(-1, 2) for contour in contours])
-    min_x, min_y = np.min(all_points, axis=0)
-    max_x, max_y = np.max(all_points, axis=0)
-    x_size = max_x - min_x
-    y_size = max_y - min_y
-    gridy_size = math.ceil(x_size / 42 * scale_factor * 25.4)
-    gridx_size = math.ceil(y_size / 42 * scale_factor * 25.4)
-    return gridx_size, gridy_size
-
-def select_image(console_text, default_dir=None):
-    try:
-        file_dialog = QtWidgets.QFileDialog()
-        # Use default_dir if provided, otherwise use ""
-        start_dir = default_dir if default_dir is not None else ""
-        file_path, _ = file_dialog.getOpenFileName(
-            None, "Select Image", start_dir, "Image files (*.jpg;*.jpeg;*.png;*.bmp)"
-        )
-        if file_path:
-            print(f"Selected file: {file_path}")
-        else:
-            print("No file selected.")
-        file_name, file_extension = os.path.splitext(os.path.basename(file_path))
-        return file_path, file_name
-    except Exception as e:
-        console_text.setText(f"Error selecting image: {str(e)}")
-        print(traceback.format_exc())
-        return None, None
-
-def generate_bin_scad(dxf_path, gridx_size, gridy_size, console_text, file_name, folder_name, splitDXF=False, border_color="blue", generate_test_slab=True):
-    try:
-        global scad_file_path  # Use the global variable to keep track of the SCAD file
-        scad_template_path = os.path.join(os.path.dirname(__file__), "..", "Step 2 DXF to STL.scad")
-        with open(scad_template_path, 'r') as file:
-            scad_content = file.read()
-        
-        # Use forward slashes for the file path(s)
-        if splitDXF and isinstance(dxf_path, list):
-            dxf_file_paths = [p.replace("\\", "/") for p in dxf_path]
-            # Sort dxf_file_paths by contour index in filename (e.g., *_contour_1.dxf, *_contour_2.dxf, ...)
-            import re
-            def contour_index(path):
-                # Match _contour_N.dxf at the end of the filename, regardless of path separator
-                m = re.search(r'_contour_(\d+)\.dxf$', os.path.basename(path))
-                return int(m.group(1)) if m else 0
-            dxf_file_paths.sort(key=contour_index)
-            dxf_paths_scad = 'dxf_file_paths = [\n' + ',\n'.join([f'"{p}"' for p in dxf_file_paths]) + '\n];\n'
-            # Split dxf_cut_depths into arrays of max size 4
-            cut_depths = ["10"] * len(dxf_file_paths)
-            cut_depth_arrays = [cut_depths[i:i+4] for i in range(0, len(cut_depths), 4)]
-            dxf_cut_depths_scad = ""
-            concat_line = ""
-            if len(cut_depth_arrays) == 1:
-                dxf_cut_depths_scad = f'dxf_cut_depths = [{", ".join(cut_depth_arrays[0])}];\n'
-            else:
-                array_names = []
-                for idx, arr in enumerate(cut_depth_arrays):
-                    name = f'dxf_cut_depths_{idx+1}'
-                    array_names.append(name)
-                    dxf_cut_depths_scad += f'{name} = [{", ".join(arr)}];\n'
-                concat_line = f'dxf_cut_depths = concat({", ".join(array_names)});\n'
-
-            # Generate section_cut_depth_N and section_parameters_N arrays, then concatenate
-            section_cut_depth_names = []
-            section_param_names = []
-            section_blocks = []
-            for idx in range(len(dxf_file_paths)):
-                cut_name = f'section_cut_depth_{idx+1}'
-                param_name = f'section_parameters_{idx+1}'
-                section_cut_depth_names.append(cut_name)
-                section_param_names.append(param_name)
-                section_blocks.append(f'{cut_name} = [20, 15, 10];\n{param_name} = [40, 0, 0];')
-            section_cut_depth_concat = f'section_cut_depth = [{', '.join(section_cut_depth_names)}];\n'
-            section_parameters_concat = f'section_parameters = [{', '.join(section_param_names)}];\n'
-
-            # Generate position_1, position_2, ... and position array using pos_xy from temp file
-            pos_xy = None
-            try:
-                import pickle
-                temp_centers_path = os.path.join(os.path.dirname(__file__), '..', 'offset_pos_xy.pkl')
-                if os.path.exists(temp_centers_path):
-                    with open(temp_centers_path, 'rb') as f:
-                        pos_xy = pickle.load(f)
-            except Exception:
-                pass
-            if not pos_xy or len(pos_xy) != len(dxf_file_paths):
-                # fallback: zeros
-                pos_xy = [[0,0] for _ in range(len(dxf_file_paths))]
-            position_lines = []
-            for idx in range(len(dxf_file_paths)):
-                position_lines.append(f'position_{idx+1} = [{pos_xy[idx][0]:.6f},{pos_xy[idx][1]:.6f},0]; // .1')
-            position_array = f'position = [{', '.join([f"position_{i+1}" for i in range(len(dxf_file_paths))])}];\n'
-            # Replace the position = [[0, 0, 0]]; // .1 line
-            updated_scad_content = scad_content.replace('position = [[0, 0, 0]]; // .1', '\n'.join(position_lines) + '\n' + position_array)
-
-            # --- FINGER SLOT OPTIONS ---
-            # Generate per-slot variables and arrays for finger slots
-            # Interleave slot_shape_N, slot_params_N, slot_pos_N for each slot
-            slot_lines = []
-            for idx in range(len(dxf_file_paths)):
-                slot_lines.append(f'slot_shape_{idx+1} = "scoop"; // [none, rectangle, oval, scoop, triangle, keyhole, teardrop]')
-                slot_lines.append(f'slot_params_{idx+1} = [80, 40, 9, 0]; // length (mm), width (mm), height (mm), rotation (deg)')
-                slot_lines.append(f'slot_pos_{idx+1} = [{pos_xy[idx][0]:.6f},{pos_xy[idx][1]:.6f}]; // Translation position [x, y] in mm')
-            slot_shape_array = f'slot_shape = [{', '.join([f"slot_shape_{i+1}" for i in range(len(dxf_file_paths))])}];\n'
-            slot_params_array = f'slot_params = [{', '.join([f"slot_params_{i+1}" for i in range(len(dxf_file_paths))])}];\n'
-            slot_pos_array = f'slot_pos = [{', '.join([f"slot_pos_{i+1}" for i in range(len(dxf_file_paths))])}];\n'
-            # Always start the block with use_finger_slots = true;
-            finger_slot_block = 'use_finger_slots = true; // true or false\n' + '\n'.join(slot_lines + [slot_shape_array, slot_params_array, slot_pos_array])
-            # Replace the finger slot options block
-            import re
-            updated_scad_content = re.sub(
-                r'/\* \[Finger Slot Options\] \*/.*?slot_pos = \[.*?\];',
-                '/* [Finger Slot Options] */\n' + finger_slot_block,
-                updated_scad_content,
-                flags=re.DOTALL
-            )
-
-            # Insert all blocks inside /* [Section Adjustments] */ in the requested order
-            scad_block = dxf_paths_scad + dxf_cut_depths_scad + concat_line + '// dxf_file_path replaced by dxf_file_paths'
-            updated_scad_content = updated_scad_content.replace(
-                'dxf_file_path = "examples/example.dxf";',
-                scad_block
-            )
-
-            section_marker = '/* [Section Adjustments] */'
-            if section_marker in updated_scad_content:
-                parts = updated_scad_content.split(section_marker, 1)
-                after_marker = parts[1]
-                new_block = '\nuse_section_cut = false; // true or false\n'
-                for block in section_blocks:
-                    new_block += block + '\n'
-                new_block += section_cut_depth_concat + section_parameters_concat
-                updated_scad_content = parts[0] + section_marker + new_block + after_marker
-        else:
-            dxf_path = dxf_path.replace("\\", "/")
-            updated_scad_content = scad_content.replace('dxf_file_path = "examples/example.dxf";', f'dxf_file_path = "{dxf_path}";')
-        
-        # Determine slot rotation and width based on gridx_size and gridy_size
-        #slot_rotation = 0 if gridx_size > gridy_size else 90
-        #slot_width = 80 if min(gridx_size, gridy_size) > 2 else 40
-        updated_scad_content = updated_scad_content.replace('size = [5, 2, 6];', f'size = [{gridx_size}, {gridy_size}, 2.8];')
-        #updated_scad_content = updated_scad_content.replace('slot_rotation = 90;', f'slot_rotation = {slot_rotation};')
-        #updated_scad_content = updated_scad_content.replace('slot_width = 40;', f'slot_width = {slot_width};')
-        updated_scad_content = updated_scad_content.replace('multiple_dxf = false;', f'multiple_dxf = {str(splitDXF).lower()};')
-        # Disable chamfered extrude (causes CGAL Minkowski errors with border)
-        updated_scad_content = updated_scad_content.replace('use_chamfered_extrude = true;', 'use_chamfered_extrude = false;')
-
-        # Save the SCAD file in the folder specified by folder_name
+        # Setup output directory
         script_directory = os.path.dirname(os.path.abspath(__file__))
         design_files_directory = os.path.join(script_directory, "..", folder_name)
         os.makedirs(design_files_directory, exist_ok=True)
         scad_file_path = os.path.join(design_files_directory, f"{file_name}.scad")
 
-        # Configure finger scoops using built-in finger slot system
-        import re
-        scoop_y_pos, scoop_y_neg = calculate_scoop_positions(dxf_path, design_files_directory, gridy_size, splitDXF)
-        finger_slot_replacement = (
-            f'/* [Finger Slot Options] */\n'
-            f'use_finger_slots = true; // true or false\n'
-            f'scoop_diameter = 20; // [10:1:40]\n'
-            f'scoop_depth = 10; // [5:1:30]\n'
-            f'slot_shape_1 = "oval"; // [none, rectangle, oval, scoop, triangle, keyhole, teardrop]\n'
-            f'slot_params_1 = [scoop_diameter, scoop_diameter, scoop_depth, 0]; // length, width, height, rotation\n'
-            f'slot_pos_1 = [0, {scoop_y_pos:.1f}]; // [x, y] in mm\n'
-            f'slot_shape_2 = "oval"; // [none, rectangle, oval, scoop, triangle, keyhole, teardrop]\n'
-            f'slot_params_2 = [scoop_diameter, scoop_diameter, scoop_depth, 0];\n'
-            f'slot_pos_2 = [0, -{scoop_y_neg:.1f}];\n'
-            f'slot_shape = [slot_shape_1, slot_shape_2];\n'
-            f'slot_params = [slot_params_1, slot_params_2];\n'
-            f'slot_pos = [slot_pos_1, slot_pos_2];'
-        )
+        # Build SCAD content
+        scad = load_scad_template()
+        scad = inject_general_settings(scad, gridx_size, gridy_size, splitDXF=splitDXF)
+        scad = inject_dxf_options(scad, dxf_path, splitDXF)
+        scad = inject_finger_scoops(scad, dxf_path, design_files_directory, gridy_size, splitDXF)
+        scad = inject_divider_params(scad)
 
-        updated_scad_content = re.sub(
-            r'/\* \[Finger Slot Options\] \*/.*?slot_pos = \[.*?\];',
-            finger_slot_replacement,
-            updated_scad_content,
-            flags=re.DOTALL
-        )
-
-
-        # Add divider parameters (required for gridfinity_cup module)
-        divider_params = """
-divider_walls_enabled = false;
-divider_walls = 0;
-divider_headroom = 0;
-divider_walls_support_thickness = 0;
-divider_wall_slot_size = 0;
-divider_walls_spacing = 0;
-divider_walls_thickness = 0;
-divider_clearance = 0;
-divider_slot_spanning = false;
-"""
-        updated_scad_content = updated_scad_content.replace(
-            'text_font = "Aldo";',
-            'text_font = "Aldo";\n' + divider_params
-        )
-
-        # Build label from filename: cl_420 -> "CL 420"
         label_text = file_name.upper().replace('_', ' ')
+        scad = inject_border_and_text(scad, label_text, border_color, gridx_size, gridy_size)
 
-        # Add colored border and text label
-        # Build label from filename: cl_420 -> "CL 420"
-        label_text = file_name.upper().replace('_', ' ')
+        # Write files
+        with open(scad_file_path, 'w') as f:
+            f.write(scad)
+        write_presets_json(scad_file_path, gridx_size, gridy_size)
 
-        # Add border and text
-        border_params, border_geometry = generate_border_and_text(label_text, border_color, gridx_size, gridy_size)
-        updated_scad_content = updated_scad_content.replace(
-            'module end_of_customizer_opts() {}',
-            border_params + '\nmodule end_of_customizer_opts() {}'
-        )
-        updated_scad_content += border_geometry
-
-        with open(scad_file_path, 'w') as scad_file:
-            scad_file.write(updated_scad_content)
-
-            # Generate OpenSCAD Customizer presets JSON
-            import json
-            presets_path = scad_file_path.replace('.scad', '.json')
-            presets = {
-                "parameterSets": {
-                    "standard": {
-                        "size": f"[{gridx_size}, {gridy_size}, 2.8]",
-                        "use_chamfered_extrude": "false",
-                        "lip_style": "none",
-                        "use_finger_slots": "false",
-                        "use_section_cut": "false",
-                        "add_shape_data": "false",
-                        "half_pitch": "false",
-                        "enable_magnets": "false",
-                        "include_post": "false",
-                        "include_cutout": "false",
-                        "include_label": "false",
-                        "text_1": "false",
-                        "text_2": "false",
-                        "filled_in": "enabled",
-                        "render_position": "center"
-                    }
-                },
-                "fileFormatVersion": "1"
-            }
-            with open(presets_path, 'w') as pf:
-                json.dump(presets, pf, indent=2)
-
-        # Paths to possible OpenSCAD executables
-#        openscad_paths = [
-#            "C:/Program Files/OpenSCAD/openscad.exe",
-#            "C:/Program Files/OpenSCAD (Nightly)/openscad.exe"
-#        ]
-#
-#        # Find the first valid OpenSCAD executable
-#        openscad_executable = next((path for path in openscad_paths if os.path.exists(path)), None)
-#        if not openscad_executable:
-#            console_text.setText("Error: OpenSCAD executable not found in expected directories.")
-#            return
-#        
-#        # Open the SCAD file with OpenSCAD
-#        subprocess.Popen([openscad_executable, scad_file_path])
-
-        # Measure DXF bounding box
+        # Report
         dim_text = measure_dxf_bounding_box(dxf_path, design_files_directory, splitDXF)
         console_text.setText(f"Bin SCAD written to: {os.path.basename(scad_file_path)}{dim_text}")
 
     except Exception as e:
-        console_text.setText(f"Error importing to OpenSCAD: {str(e)}")
+        console_text.setText(f"Error generating bin SCAD: {str(e)}")
         print(traceback.format_exc())
 
-def generate_test_slab(dxf_path, gridx_size, gridy_size, console_text, file_name, folder_name, splitDXF=False):
+
+def generate_test_slab(dxf_path, gridx_size, gridy_size, console_text, file_name,
+                       folder_name, splitDXF=False):
+    """Generate a thin test slab SCAD for fit validation before full print."""
     try:
         script_directory = os.path.dirname(os.path.abspath(__file__))
         design_files_directory = os.path.join(script_directory, "..", folder_name)
         os.makedirs(design_files_directory, exist_ok=True)
         test_slab_path = os.path.join(design_files_directory, f"{file_name}_test_slab.scad")
 
-        # Collect all DXF file references
+        # Collect DXF file references
         if splitDXF and isinstance(dxf_path, list):
             dxf_files = [p.replace("\\", "/") for p in dxf_path]
         else:
@@ -593,85 +698,54 @@ def generate_test_slab(dxf_path, gridx_size, gridy_size, console_text, file_name
         with open(test_slab_path, 'w') as test_file:
             test_file.write(test_slab_content)
 
-        # Measure DXF bounding box
         dim_text = measure_dxf_bounding_box(dxf_path, design_files_directory, splitDXF)
         console_text.setText(f"Test slab written to: {os.path.basename(test_slab_path)}{dim_text}")
- 
+
     except Exception as e:
         console_text.setText(f"Error generating test slab: {str(e)}")
         print(traceback.format_exc())
 
-def exit_application(console_text):
+
+# ============================================================
+# UI Functions
+# ============================================================
+
+def select_image(console_text, default_dir=None):
     try:
-        global scad_file_path  # Use the global variable to keep track of the SCAD file
-        QtWidgets.QApplication.quit()
+        file_dialog = QtWidgets.QFileDialog()
+        start_dir = default_dir if default_dir is not None else ""
+        file_path, _ = file_dialog.getOpenFileName(
+            None, "Select Image", start_dir, "Image files (*.jpg;*.jpeg;*.png;*.bmp)"
+        )
+        if file_path:
+            print(f"Selected file: {file_path}")
+        else:
+            print("No file selected.")
+        file_name, file_extension = os.path.splitext(os.path.basename(file_path))
+        return file_path, file_name
     except Exception as e:
-        console_text.setText(f"Error exiting application: {str(e)}")
+        console_text.setText(f"Error selecting image: {str(e)}")
         print(traceback.format_exc())
+        return None, None
+
 
 def create_main_window():
     MainWindow = QtWidgets.QMainWindow()
     ui = Ui_MainWindow()
     ui.setupUi(MainWindow)
-    
+
     canvas = ui.canvas
     canvas.setScene(QtWidgets.QGraphicsScene())
-    
-    return (MainWindow, canvas, ui.load_button, ui.process_button, ui.import_button, 
-            ui.exit_button, ui.threshold_entry, ui.offset_entry, ui.token_entry, 
+
+    return (MainWindow, canvas, ui.load_button, ui.process_button, ui.import_button,
+            ui.exit_button, ui.threshold_entry, ui.offset_entry, ui.token_entry,
             ui.resolution_entry, ui.console_text)
 
-def display_image_on_canvas(image, canvas, region, caption):
-    try:
-        img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        img = Image.fromarray(img)
-        
-        # Resize the image to fit 1/3 of the horizontal screen while maintaining aspect ratio
-        canvas_width = canvas.width() // 3
-        canvas_height = canvas.height() - 50
-        
-        # Calculate the scaling factor to maintain aspect ratio
-        scale_factor = min(canvas_width / img.width, canvas_height / img.height)
-        new_width = int(img.width * scale_factor)
-        new_height = int(img.height * scale_factor)
-        
-        img = img.resize((new_width, new_height), Image.LANCZOS)
-        
-        # Convert the image to QImage
-        img_data = img.tobytes()
-        bytes_per_line = new_width * 3
-        qimage = QtGui.QImage(img_data, new_width, new_height, bytes_per_line, QtGui.QImage.Format_RGB888)
-        pixmap = QtGui.QPixmap.fromImage(qimage)
-        
-        if region == 1:
-            x_offset = canvas.width() // 6
-            canvas.image1 = pixmap
-        elif region == 2:
-            x_offset = canvas_width
-            canvas.image2 = pixmap
-        elif region == 3:
-            x_offset = 2 * canvas_width
-            canvas.image3 = pixmap
-        canvas.scene().addPixmap(pixmap).setPos(x_offset, 0)
-        canvas.scene().addText(caption, QtGui.QFont("Helvetica", 16)).setPos(x_offset + canvas_width // 2, 5)
-        
-        # Update the canvas
-        canvas.update()
-    except Exception as e:
-        print(f"Error displaying image on canvas: {str(e)}")
-        print(traceback.format_exc())
 
-def save_single_dxf(contour, scale_factor, pos_xy, file_name, idx, folder_name):
-    center_y, center_x = pos_xy
-    doc = ezdxf.new()
-    msp = doc.modelspace()
-    points = [
-        (point[0][1] * scale_factor - center_y * scale_factor
-         , point[0][0] * scale_factor - center_x * scale_factor
-         ) for point in contour]
-    if points[0] != points[-1]:
-        points.append((points[0][0], points[0][1]))
-    msp.add_lwpolyline(points)
-    single_name = f"{file_name}_contour_{idx+1}"
-    output_path = save_dxf_file(doc, single_name, folder_name)
-    return output_path
+def exit_application(console_text):
+    try:
+        global scad_file_path
+        QtWidgets.QApplication.quit()
+    except Exception as e:
+        console_text.setText(f"Error exiting application: {str(e)}")
+        print(traceback.format_exc())
