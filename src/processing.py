@@ -32,6 +32,9 @@ def validate_input(value, default, min_val=None, max_val=None):
         value = default
     return value
 
+# ============================================================
+# UI Functions
+# ============================================================
 def get_threshold_input(threshold_entry, offset_entry, token_entry, resolution_entry):
     global offset, token, resolution
     threshold_input = validate_input(threshold_entry.text(), 110, 0, 255)
@@ -40,20 +43,47 @@ def get_threshold_input(threshold_entry, offset_entry, token_entry, resolution_e
     resolution = validate_input(resolution_entry.text(), 10)
     return threshold_input
 
+def select_image(console_text, default_dir=None):
+    try:
+        file_dialog = QtWidgets.QFileDialog()
+        start_dir = default_dir if default_dir is not None else ""
+        file_path, _ = file_dialog.getOpenFileName(
+            None, "Select Image", start_dir, "Image files (*.jpg;*.jpeg;*.png;*.bmp)"
+        )
+        if file_path:
+            print(f"Selected file: {file_path}")
+        else:
+            print("No file selected.")
+        file_name, file_extension = os.path.splitext(os.path.basename(file_path))
+        return file_path, file_name
+    except Exception as e:
+        console_text.setText(f"Error selecting image: {str(e)}")
+        print(traceback.format_exc())
+        return None, None
+
+def create_main_window():
+    MainWindow = QtWidgets.QMainWindow()
+    ui = Ui_MainWindow()
+    ui.setupUi(MainWindow)
+
+    canvas = ui.canvas
+    canvas.setScene(QtWidgets.QGraphicsScene())
+
+    return (MainWindow, canvas, ui.load_button, ui.process_button, ui.import_button,
+            ui.exit_button, ui.threshold_entry, ui.offset_entry, ui.token_entry,
+            ui.resolution_entry, ui.console_text)
+
+def exit_application(console_text):
+    try:
+        global scad_file_path
+        QtWidgets.QApplication.quit()
+    except Exception as e:
+        console_text.setText(f"Error exiting application: {str(e)}")
+        print(traceback.format_exc())
+
 # ============================================================
 # Image Processing & Display
 # ============================================================
-def clear_canvas(canvas, keep_original=False):
-    try:
-        canvas.scene().clear()
-        if keep_original and hasattr(canvas, 'image1'):
-            canvas.scene().addPixmap(canvas.image1).setPos(0, 0)
-            canvas.scene().addText("Original", QtGui.QFont("Helvetica", 16)).setPos(canvas.width() // 6, 5)
-        canvas.update()
-    except Exception as e:
-        print(f"Error clearing canvas: {str(e)}")
-        print(traceback.format_exc())
-
 def preprocess_image(image, threshold_input):
     if isinstance(image, str):
         image = cv2.imread(image)
@@ -63,6 +93,10 @@ def preprocess_image(image, threshold_input):
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
     return image, thresh
+
+def calculate_diameter(contour):
+    (x, y), radius = cv2.minEnclosingCircle(contour)
+    return 2 * radius
 
 def find_max_p2d_ratio_contour(contours):
     max_p2d_ratio = 0
@@ -78,17 +112,16 @@ def find_max_p2d_ratio_contour(contours):
             max_p2d_contour = contour
     return max_p2d_contour, max_p2d_ratio
 
-def calculate_diameter(contour):
-    (x, y), radius = cv2.minEnclosingCircle(contour)
-    return 2 * radius
-
-
-def display_contours(image, contours, canvas, region, caption, color):
-    contours_img = image.copy()
-    thickness = max(1, min(image.shape[0], image.shape[1]) // 200)
-    cv2.drawContours(contours_img, contours, -1, color, thickness)
-    display_image_on_canvas(contours_img, canvas, region, caption)
-
+def clear_canvas(canvas, keep_original=False):
+    try:
+        canvas.scene().clear()
+        if keep_original and hasattr(canvas, 'image1'):
+            canvas.scene().addPixmap(canvas.image1).setPos(0, 0)
+            canvas.scene().addText("Original", QtGui.QFont("Helvetica", 16)).setPos(canvas.width() // 6, 5)
+        canvas.update()
+    except Exception as e:
+        print(f"Error clearing canvas: {str(e)}")
+        print(traceback.format_exc())
 
 def display_image_on_canvas(image, canvas, region, caption):
     try:
@@ -125,6 +158,12 @@ def display_image_on_canvas(image, canvas, region, caption):
     except Exception as e:
         print(f"Error displaying image on canvas: {str(e)}")
         print(traceback.format_exc())
+
+def display_contours(image, contours, canvas, region, caption, color):
+    contours_img = image.copy()
+    thickness = max(1, min(image.shape[0], image.shape[1]) // 200)
+    cv2.drawContours(contours_img, contours, -1, color, thickness)
+    display_image_on_canvas(contours_img, canvas, region, caption)
 
 def find_diameter(image, canvas, threshold_entry, offset_entry, token_entry, resolution_entry, console_text):
     try:
@@ -365,17 +404,6 @@ def _load_offset_positions(num_files):
         pass
     return [[0, 0] for _ in range(num_files)]
 
-def inject_dxf_options(scad, dxf_path, splitDXF=False):
-    """Inject DXF file paths, cut depths, positions, and section adjustments."""
-    if splitDXF and isinstance(dxf_path, list):
-        return _inject_dxf_split(scad, dxf_path)
-    else:
-        dxf_path = dxf_path.replace("\\", "/")
-        return scad.replace(
-            'dxf_file_path = "examples/example.dxf";',
-            f'dxf_file_path = "{dxf_path}";'
-        )
-
 def _inject_dxf_split(scad, dxf_paths):
     """Handle split DXF injection for multi-contour tools."""
     dxf_file_paths = [p.replace("\\", "/") for p in dxf_paths]
@@ -455,6 +483,17 @@ def _inject_dxf_split(scad, dxf_paths):
 
     return scad
 
+def inject_dxf_options(scad, dxf_path, splitDXF=False):
+    """Inject DXF file paths, cut depths, positions, and section adjustments."""
+    if splitDXF and isinstance(dxf_path, list):
+        return _inject_dxf_split(scad, dxf_path)
+    else:
+        dxf_path = dxf_path.replace("\\", "/")
+        return scad.replace(
+            'dxf_file_path = "examples/example.dxf";',
+            f'dxf_file_path = "{dxf_path}";'
+        )
+
 def inject_finger_scoops(scad, dxf_path, folder_path, gridy_size, splitDXF=False):
     """Inject finger scoop parameters using built-in finger slot system.
 
@@ -485,6 +524,44 @@ def inject_finger_scoops(scad, dxf_path, folder_path, gridy_size, splitDXF=False
     scad = re.sub(
         r'/\* \[Finger Slot Options\] \*/.*?slot_pos = \[.*?\];',
         replacement, scad, flags=re.DOTALL
+    )
+    return scad
+
+def inject_center_cutout(scad):
+    """Add center cutout option for large tools."""
+    params = (
+        '\n/* [Center Cutout] */\n'
+        'center_cutout_enabled = false; // true or false\n'
+        'center_cutout_width = 30; // [10:5:150]\n'
+        'split_keep = "both"; // [both, left, right]\n'
+    )
+
+    # Determines where to insert our Customizer settings
+    scad = scad.replace(
+        '/* [DXF Options] */',
+        params + '/* [DXF Options] */'
+    )
+
+    # Cut a rectangle through the center, inside the render difference block
+    cutout = (
+        '\n// Center cutout for large tools\n'
+        'if (center_cutout_enabled) {\n'
+        '    translate([-center_cutout_width/2, -(depth[0]*42 + 10)/2, -1])\n'
+        '        cube([center_cutout_width, depth[0]*42 + 10, height[0]*7 + 10]);\n'
+        '    if (split_keep == "left") {\n'
+        '        translate([center_cutout_width/2, -(depth[0]*42 + 10)/2, -1])\n'
+        '            cube([width[0]*42, depth[0]*42 + 10, height[0]*7 + 10]);\n'
+        '    }\n'
+        '    if (split_keep == "right") {\n'
+        '        translate([-(width[0]*42 + center_cutout_width/2), -(depth[0]*42 + 10)/2, -1])\n'
+        '            cube([width[0]*42, depth[0]*42 + 10, height[0]*7 + 10]);\n'
+        '    }\n'
+        '}\n'
+    )
+
+    scad = scad.replace(
+        '}\n\n// Conditionally extrude',
+        cutout + '}\n\n// Conditionally extrude'
     )
     return scad
 
@@ -577,44 +654,6 @@ def inject_border_and_text(scad, label_text, border_color, gridx, gridy):
         params + '\n/* [Section Adjustments] */'
     )
     scad += geometry
-    return scad
-
-def inject_center_cutout(scad):
-    """Add center cutout option for large tools."""
-    params = (
-        '\n/* [Center Cutout] */\n'
-        'center_cutout_enabled = false; // true or false\n'
-        'center_cutout_width = 30; // [10:5:150]\n'
-        'split_keep = "both"; // [both, left, right]\n'
-    )
-
-    # Determines where to insert our Customizer settings
-    scad = scad.replace(
-        '/* [DXF Options] */',
-        params + '/* [DXF Options] */'
-    )
-
-    # Cut a rectangle through the center, inside the render difference block
-    cutout = (
-        '\n// Center cutout for large tools\n'
-        'if (center_cutout_enabled) {\n'
-        '    translate([-center_cutout_width/2, -(depth[0]*42 + 10)/2, -1])\n'
-        '        cube([center_cutout_width, depth[0]*42 + 10, height[0]*7 + 10]);\n'
-        '    if (split_keep == "left") {\n'
-        '        translate([center_cutout_width/2, -(depth[0]*42 + 10)/2, -1])\n'
-        '            cube([width[0]*42, depth[0]*42 + 10, height[0]*7 + 10]);\n'
-        '    }\n'
-        '    if (split_keep == "right") {\n'
-        '        translate([-(width[0]*42 + center_cutout_width/2), -(depth[0]*42 + 10)/2, -1])\n'
-        '            cube([width[0]*42, depth[0]*42 + 10, height[0]*7 + 10]);\n'
-        '    }\n'
-        '}\n'
-    )
-
-    scad = scad.replace(
-        '}\n\n// Conditionally extrude',
-        cutout + '}\n\n// Conditionally extrude'
-    )
     return scad
 
 # ============================================================
@@ -762,46 +801,4 @@ def generate_test_slab(dxf_path, gridx_size, gridy_size, console_text, file_name
 
     except Exception as e:
         console_text.setText(f"Error generating test slab: {str(e)}")
-        print(traceback.format_exc())
-
-
-# ============================================================
-# UI Functions
-# ============================================================
-def select_image(console_text, default_dir=None):
-    try:
-        file_dialog = QtWidgets.QFileDialog()
-        start_dir = default_dir if default_dir is not None else ""
-        file_path, _ = file_dialog.getOpenFileName(
-            None, "Select Image", start_dir, "Image files (*.jpg;*.jpeg;*.png;*.bmp)"
-        )
-        if file_path:
-            print(f"Selected file: {file_path}")
-        else:
-            print("No file selected.")
-        file_name, file_extension = os.path.splitext(os.path.basename(file_path))
-        return file_path, file_name
-    except Exception as e:
-        console_text.setText(f"Error selecting image: {str(e)}")
-        print(traceback.format_exc())
-        return None, None
-
-def create_main_window():
-    MainWindow = QtWidgets.QMainWindow()
-    ui = Ui_MainWindow()
-    ui.setupUi(MainWindow)
-
-    canvas = ui.canvas
-    canvas.setScene(QtWidgets.QGraphicsScene())
-
-    return (MainWindow, canvas, ui.load_button, ui.process_button, ui.import_button,
-            ui.exit_button, ui.threshold_entry, ui.offset_entry, ui.token_entry,
-            ui.resolution_entry, ui.console_text)
-
-def exit_application(console_text):
-    try:
-        global scad_file_path
-        QtWidgets.QApplication.quit()
-    except Exception as e:
-        console_text.setText(f"Error exiting application: {str(e)}")
         print(traceback.format_exc())
