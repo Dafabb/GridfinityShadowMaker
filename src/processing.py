@@ -521,29 +521,39 @@ def generate_border_and_text(label_text, border_color="blue", gridx=6, gridy=2):
         f'text_x = {text_x:.1f}; // [-200:1:200]\n'
         f'text_y = {text_y:.1f}; // [-200:1:200]\n'
     )
+
     geometry = f"""
-// === Colored border around bin top edge ===
-if (border_enabled) {{
-    color("{border_color}")
-    translate([0, 0, height[0]*7])
-    linear_extrude(height = border_height)
-    difference() {{
-        offset(r = 3.75)
-            square([width[0]*42 - 0.5 - 7.5, depth[0]*42 - 0.5 - 7.5], center=true);
-        offset(r = 3.75)
-            square([width[0]*42 - 4.5 - 7.5, depth[0]*42 - 4.5 - 7.5], center=true);
+// === Colored border and text with center cutout support ===
+difference() {{
+    union() {{
+        if (border_enabled) {{
+            color("{border_color}")
+            translate([0, 0, height[0]*7])
+            linear_extrude(height = border_height)
+            difference() {{
+                offset(r = 3.75)
+                    square([width[0]*42 - 0.5 - 7.5, depth[0]*42 - 0.5 - 7.5], center=true);
+                offset(r = 3.75)
+                    square([width[0]*42 - 4.5 - 7.5, depth[0]*42 - 4.5 - 7.5], center=true);
+            }}
+        }}
+        // === Tool label text ===
+        if (text_enabled) {{
+            color("{border_color}")
+            translate([text_x, text_y, height[0]*7])
+            linear_extrude(height = border_height)
+            rotate([0, 0, 180])
+            text(text_content, size = border_text_size, font = "Arial Rounded MT Bold", halign = "center", valign = "center");
+        }}
+    }}
+    // Center cutout through border/text
+    if (center_cutout_enabled) {{
+        translate([-center_cutout_width/2, -(depth[0]*42 + 10)/2, height[0]*7 - 1])
+            cube([center_cutout_width, depth[0]*42 + 10, border_height + 10]);
     }}
 }}
-
-// === Tool label text ===
-if (text_enabled) {{
-    color("{border_color}")
-    translate([text_x, text_y, height[0]*7])
-    linear_extrude(height = border_height)
-    rotate([0, 0, 180])
-    text(text_content, size = border_text_size, font = "Arial Rounded MT Bold", halign = "center", valign = "center");
-}}
 """
+
     return params, geometry
 
 def inject_border_and_text(scad, label_text, border_color, gridx, gridy):
