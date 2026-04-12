@@ -520,6 +520,7 @@ def generate_border_and_text(label_text, border_color="blue", gridx=6, gridy=2):
         f'border_text_size = 7; // [4:1:14]\n'
         f'text_x = {text_x:.1f}; // [-200:1:200]\n'
         f'text_y = {text_y:.1f}; // [-200:1:200]\n'
+        f'text_rotation = 180; // [0:90:360]\n'
     )
 
     geometry = f"""
@@ -542,7 +543,7 @@ difference() {{
             color("{border_color}")
             translate([text_x, text_y, height[0]*7])
             linear_extrude(height = border_height)
-            rotate([0, 0, 180])
+            rotate([0, 0, text_rotation])
             text(text_content, size = border_text_size, font = "Arial Rounded MT Bold", halign = "center", valign = "center");
         }}
     }}
@@ -587,9 +588,10 @@ def inject_center_cutout(scad):
         'split_keep = "both"; // [both, left, right]\n'
     )
 
+    # Determines where to insert our Customizer settings
     scad = scad.replace(
-        '/* [Section Adjustments] */',
-        params + '/* [Section Adjustments] */'
+        '/* [DXF Options] */',
+        params + '/* [DXF Options] */'
     )
 
     # Cut a rectangle through the center, inside the render difference block
@@ -717,20 +719,38 @@ def generate_test_slab(dxf_path, gridx_size, gridy_size, console_text, file_name
             f'        import("{dxf}");'
             for dxf in dxf_files
         ])
+
         test_slab_content = (
             f"// Test slab for fit validation\n"
             f"// Drop tool onto slab to check pocket fit before full print\n\n"
             f"/* [Slab Settings] */\n"
-            f"// Margin around tool outline in mm\n"
             f"margin = 10; // [5:1:30]\n"
-            f"// Slab thickness in mm\n"
             f"slab_height = 0.60; // [0.20:0.20:2.0]\n\n"
-            f"linear_extrude(height = slab_height)\n"
+            f"/* [Center Cutout] */\n"
+            f"center_cutout_enabled = false; // true or false\n"
+            f"center_cutout_width = 1; // [1:1:150]\n"
+            f"split_keep = \"both\"; // [both, left, right]\n\n"
+            f"module end_of_customizer_opts() {{}}\n\n"
             f"difference() {{\n"
-            f"    offset(delta = margin)\n"
-            f"        scale([25.4, 25.4])\n"
-            f"            import(\"{dxf_files[0]}\");\n"
+            f"    linear_extrude(height = slab_height)\n"
+            f"    difference() {{\n"
+            f"        offset(delta = margin)\n"
+            f"            scale([25.4, 25.4])\n"
+            f"                import(\"{dxf_files[0]}\");\n"
             f"{dxf_cuts}\n"
+            f"    }}\n"
+            f"    if (center_cutout_enabled) {{\n"
+            f"        translate([-center_cutout_width/2, -500, -1])\n"
+            f"            cube([center_cutout_width, 1000, slab_height + 10]);\n"
+            f"        if (split_keep == \"left\") {{\n"
+            f"            translate([center_cutout_width/2, -500, -1])\n"
+            f"                cube([500, 1000, slab_height + 10]);\n"
+            f"        }}\n"
+            f"        if (split_keep == \"right\") {{\n"
+            f"            translate([-(500 + center_cutout_width/2), -500, -1])\n"
+            f"                cube([500, 1000, slab_height + 10]);\n"
+            f"        }}\n"
+            f"    }}\n"
             f"}}\n"
         )
 
