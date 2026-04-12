@@ -317,7 +317,6 @@ def measure_dxf_bounding_box(dxf_path, folder_path, splitDXF=False):
     except Exception:
         return ""
 
-
 def calculate_scoop_positions(dxf_path, folder_path, gridy_size, splitDXF=False):
     """Calculate Y positions for finger scoops from DXF tool outline edges."""
     scoop_y_pos = gridy_size * 42 / 2
@@ -336,7 +335,6 @@ def calculate_scoop_positions(dxf_path, folder_path, gridy_size, splitDXF=False)
         pass
     return scoop_y_pos, scoop_y_neg
 
-
 # ============================================================
 # SCAD Generation — Injection Helpers
 # ============================================================
@@ -346,7 +344,6 @@ def load_scad_template():
     with open(template_path, 'r') as f:
         return f.read()
 
-
 def inject_general_settings(scad, gridx, gridy, height=2.8, splitDXF=False):
     """Inject size, chamfer disable, and multiple_dxf flag."""
     scad = scad.replace('size = [5, 2, 6];', f'size = [{gridx}, {gridy}, {height}];')
@@ -354,7 +351,6 @@ def inject_general_settings(scad, gridx, gridy, height=2.8, splitDXF=False):
     scad = scad.replace('use_chamfered_extrude = true;', 'use_chamfered_extrude = false;')
     scad = scad.replace('chamfer_height = 5;', 'chamfer_height = 3;')
     return scad
-
 
 def _load_offset_positions(num_files):
     """Load contour center positions from temp pickle file."""
@@ -369,7 +365,6 @@ def _load_offset_positions(num_files):
         pass
     return [[0, 0] for _ in range(num_files)]
 
-
 def inject_dxf_options(scad, dxf_path, splitDXF=False):
     """Inject DXF file paths, cut depths, positions, and section adjustments."""
     if splitDXF and isinstance(dxf_path, list):
@@ -380,7 +375,6 @@ def inject_dxf_options(scad, dxf_path, splitDXF=False):
             'dxf_file_path = "examples/example.dxf";',
             f'dxf_file_path = "{dxf_path}";'
         )
-
 
 def _inject_dxf_split(scad, dxf_paths):
     """Handle split DXF injection for multi-contour tools."""
@@ -461,7 +455,6 @@ def _inject_dxf_split(scad, dxf_paths):
 
     return scad
 
-
 def inject_finger_scoops(scad, dxf_path, folder_path, gridy_size, splitDXF=False):
     """Inject finger scoop parameters using built-in finger slot system.
 
@@ -495,7 +488,6 @@ def inject_finger_scoops(scad, dxf_path, folder_path, gridy_size, splitDXF=False
     )
     return scad
 
-
 def inject_divider_params(scad):
     """Add divider parameters required for gridfinity_cup module."""
     divider_params = (
@@ -510,7 +502,6 @@ def inject_divider_params(scad):
         'divider_slot_spanning = false;\n'
     )
     return scad.replace('text_font = "Aldo";', 'text_font = "Aldo";\n' + divider_params)
-
 
 def generate_border_and_text(label_text, border_color="blue", gridx=6, gridy=2):
     """Generate border/text Customizer parameters and SCAD geometry.
@@ -555,7 +546,6 @@ if (text_enabled) {{
 """
     return params, geometry
 
-
 def inject_border_and_text(scad, label_text, border_color, gridx, gridy):
     """Inject border/text params into Customizer and append geometry.
 
@@ -570,7 +560,36 @@ def inject_border_and_text(scad, label_text, border_color, gridx, gridy):
     scad += geometry
     return scad
 
+def inject_center_cutout(scad):
+    """Add center cutout option for large tools."""
+    params = (
+        '\n/* [Center Cutout] */\n'
+        'center_cutout_enabled = false; // true or false\n'
+        'center_cutout_width = 30; // [10:5:150]\n'
+    )
+    scad = scad.replace(
+        '/* [Section Adjustments] */',
+        params + '/* [Section Adjustments] */'
+    )
 
+    # Cut a rectangle through the center, inside the render difference block
+    cutout = (
+        '\n// Center cutout for large tools\n'
+        'if (center_cutout_enabled) {\n'
+        '    translate([-center_cutout_width/2, -(depth[0]*42 + 10)/2, -1])\n'
+        '        cube([center_cutout_width, depth[0]*42 + 10, height[0]*7 + 10]);\n'
+        '}\n'
+    )
+
+    scad = scad.replace(
+        '}\n\n// Conditionally extrude',
+        cutout + '}\n\n// Conditionally extrude'
+    )
+    return scad
+
+# ============================================================
+# SCAD Presets JSON file
+# ============================================================
 def write_presets_json(scad_file_path, gridx, gridy):
     """Write OpenSCAD Customizer presets JSON alongside SCAD file."""
     presets_path = scad_file_path.replace('.scad', '.json')
@@ -598,7 +617,6 @@ def write_presets_json(scad_file_path, gridx, gridy):
     }
     with open(presets_path, 'w') as f:
         json.dump(presets, f, indent=2)
-
 
 # ============================================================
 # SCAD Generation — Main Assemblers
@@ -631,6 +649,7 @@ def generate_bin_scad(dxf_path, gridx_size, gridy_size, console_text, file_name,
         scad = inject_general_settings(scad, gridx_size, gridy_size, splitDXF=splitDXF)
         scad = inject_dxf_options(scad, dxf_path, splitDXF)
         scad = inject_finger_scoops(scad, dxf_path, design_files_directory, gridy_size, splitDXF)
+        scad = inject_center_cutout(scad)
         scad = inject_divider_params(scad)
 
         label_text = file_name.upper().replace('_', ' ')
