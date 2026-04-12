@@ -550,6 +550,14 @@ difference() {{
     if (center_cutout_enabled) {{
         translate([-center_cutout_width/2, -(depth[0]*42 + 10)/2, height[0]*7 - 1])
             cube([center_cutout_width, depth[0]*42 + 10, border_height + 10]);
+        if (split_keep == "left") {{
+            translate([center_cutout_width/2, -(depth[0]*42 + 10)/2, height[0]*7 - 1])
+                cube([width[0]*42, depth[0]*42 + 10, border_height + 10]);
+        }}
+        if (split_keep == "right") {{
+            translate([-(width[0]*42 + center_cutout_width/2), -(depth[0]*42 + 10)/2, height[0]*7 - 1])
+                cube([width[0]*42, depth[0]*42 + 10, border_height + 10]);
+        }}
     }}
 }}
 """
@@ -576,7 +584,9 @@ def inject_center_cutout(scad):
         '\n/* [Center Cutout] */\n'
         'center_cutout_enabled = false; // true or false\n'
         'center_cutout_width = 30; // [10:5:150]\n'
+        'split_keep = "both"; // [both, left, right]\n'
     )
+
     scad = scad.replace(
         '/* [Section Adjustments] */',
         params + '/* [Section Adjustments] */'
@@ -588,6 +598,14 @@ def inject_center_cutout(scad):
         'if (center_cutout_enabled) {\n'
         '    translate([-center_cutout_width/2, -(depth[0]*42 + 10)/2, -1])\n'
         '        cube([center_cutout_width, depth[0]*42 + 10, height[0]*7 + 10]);\n'
+        '    if (split_keep == "left") {\n'
+        '        translate([center_cutout_width/2, -(depth[0]*42 + 10)/2, -1])\n'
+        '            cube([width[0]*42, depth[0]*42 + 10, height[0]*7 + 10]);\n'
+        '    }\n'
+        '    if (split_keep == "right") {\n'
+        '        translate([-(width[0]*42 + center_cutout_width/2), -(depth[0]*42 + 10)/2, -1])\n'
+        '            cube([width[0]*42, depth[0]*42 + 10, height[0]*7 + 10]);\n'
+        '    }\n'
         '}\n'
     )
 
