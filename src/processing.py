@@ -18,11 +18,9 @@ from src.ui import Ui_MainWindow  # type: ignore
 
 scad_file_path = None
 
-
 # ============================================================
 # Utility Functions
 # ============================================================
-
 def validate_input(value, default, min_val=None, max_val=None):
     try:
         value = float(value)
@@ -34,7 +32,6 @@ def validate_input(value, default, min_val=None, max_val=None):
         value = default
     return value
 
-
 def get_threshold_input(threshold_entry, offset_entry, token_entry, resolution_entry):
     global offset, token, resolution
     threshold_input = validate_input(threshold_entry.text(), 110, 0, 255)
@@ -42,7 +39,6 @@ def get_threshold_input(threshold_entry, offset_entry, token_entry, resolution_e
     token = validate_input(token_entry.text(), 2.000)
     resolution = validate_input(resolution_entry.text(), 10)
     return threshold_input
-
 
 # ============================================================
 # Image Processing & Display
@@ -58,7 +54,6 @@ def clear_canvas(canvas, keep_original=False):
         print(f"Error clearing canvas: {str(e)}")
         print(traceback.format_exc())
 
-
 def preprocess_image(image, threshold_input):
     if isinstance(image, str):
         image = cv2.imread(image)
@@ -68,7 +63,6 @@ def preprocess_image(image, threshold_input):
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
     return image, thresh
-
 
 def find_max_p2d_ratio_contour(contours):
     max_p2d_ratio = 0
@@ -83,7 +77,6 @@ def find_max_p2d_ratio_contour(contours):
             max_p2d_ratio = p2d_ratio
             max_p2d_contour = contour
     return max_p2d_contour, max_p2d_ratio
-
 
 def calculate_diameter(contour):
     (x, y), radius = cv2.minEnclosingCircle(contour)
@@ -133,7 +126,6 @@ def display_image_on_canvas(image, canvas, region, caption):
         print(f"Error displaying image on canvas: {str(e)}")
         print(traceback.format_exc())
 
-
 def find_diameter(image, canvas, threshold_entry, offset_entry, token_entry, resolution_entry, console_text):
     try:
         diameter = None
@@ -156,7 +148,6 @@ def find_diameter(image, canvas, threshold_entry, offset_entry, token_entry, res
         console_text.setText(f"Error finding diameter: {str(e)}")
         print(traceback.format_exc())
         return None, None
-
 
 def find_contours(image, diameter, threshold_input, canvas, console_text):
     try:
@@ -185,11 +176,9 @@ def find_contours(image, diameter, threshold_input, canvas, console_text):
         print(traceback.format_exc())
         return None, None
 
-
 # ============================================================
 # DXF Functions
 # ============================================================
-
 def save_dxf_file(doc, file_name, folder_name):
     script_directory = os.path.dirname(os.path.abspath(__file__))
     design_files_directory = os.path.join(script_directory, "..", folder_name)
@@ -712,7 +701,6 @@ def generate_test_slab(dxf_path, gridx_size, gridy_size, console_text, file_name
 # ============================================================
 # UI Functions
 # ============================================================
-
 def select_image(console_text, default_dir=None):
     try:
         file_dialog = QtWidgets.QFileDialog()
@@ -731,7 +719,6 @@ def select_image(console_text, default_dir=None):
         print(traceback.format_exc())
         return None, None
 
-
 def create_main_window():
     MainWindow = QtWidgets.QMainWindow()
     ui = Ui_MainWindow()
@@ -743,7 +730,6 @@ def create_main_window():
     return (MainWindow, canvas, ui.load_button, ui.process_button, ui.import_button,
             ui.exit_button, ui.threshold_entry, ui.offset_entry, ui.token_entry,
             ui.resolution_entry, ui.console_text)
-
 
 def exit_application(console_text):
     try:
