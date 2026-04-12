@@ -47,7 +47,6 @@ def get_threshold_input(threshold_entry, offset_entry, token_entry, resolution_e
 # ============================================================
 # Image Processing & Display
 # ============================================================
-
 def clear_canvas(canvas, keep_original=False):
     try:
         canvas.scene().clear()
@@ -352,7 +351,6 @@ def calculate_scoop_positions(dxf_path, folder_path, gridy_size, splitDXF=False)
 # ============================================================
 # SCAD Generation — Injection Helpers
 # ============================================================
-
 def load_scad_template():
     """Load the base SCAD template file."""
     template_path = os.path.join(os.path.dirname(__file__), "..", "Step 2 DXF to STL.scad")
@@ -365,6 +363,7 @@ def inject_general_settings(scad, gridx, gridy, height=2.8, splitDXF=False):
     scad = scad.replace('size = [5, 2, 6];', f'size = [{gridx}, {gridy}, {height}];')
     scad = scad.replace('multiple_dxf = false;', f'multiple_dxf = {str(splitDXF).lower()};')
     scad = scad.replace('use_chamfered_extrude = true;', 'use_chamfered_extrude = false;')
+    scad = scad.replace('chamfer_height = 5;', 'chamfer_height = 3;')
     return scad
 
 
@@ -538,7 +537,7 @@ def generate_border_and_text(label_text, border_color="blue", gridx=6, gridy=2):
         f'border_height = 2; // [1:0.5:6]\n'
         f'text_enabled = true; // true or false\n'
         f'text_content = "{label_text}";\n'
-        f'text_size = 7; // [4:1:14]\n'
+        f'border_text_size = 7; // [4:1:14]\n'
         f'text_x = {text_x:.1f}; // [-200:1:200]\n'
         f'text_y = {text_y:.1f}; // [-200:1:200]\n'
     )
@@ -562,18 +561,22 @@ if (text_enabled) {{
     translate([text_x, text_y, height[0]*7])
     linear_extrude(height = border_height)
     rotate([0, 0, 180])
-    text(text_content, size = text_size, font = "Arial Rounded MT Bold", halign = "center", valign = "center");
+    text(text_content, size = border_text_size, font = "Arial Rounded MT Bold", halign = "center", valign = "center");
 }}
 """
     return params, geometry
 
 
 def inject_border_and_text(scad, label_text, border_color, gridx, gridy):
-    """Inject border/text params into Customizer and append geometry."""
+    """Inject border/text params into Customizer and append geometry.
+
+    Params are inserted before Section Adjustments to keep Customizer order:
+    General → DXF → Finger Slot → Border and Text → (rest collapsed below)
+    """
     params, geometry = generate_border_and_text(label_text, border_color, gridx, gridy)
     scad = scad.replace(
-        'module end_of_customizer_opts() {}',
-        params + '\nmodule end_of_customizer_opts() {}'
+        '/* [Section Adjustments] */',
+        params + '\n/* [Section Adjustments] */'
     )
     scad += geometry
     return scad
