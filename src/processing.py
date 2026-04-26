@@ -340,6 +340,40 @@ def save_contours_as_dxf(contours, file_name, scale_factor, console_text, folder
         return None, None, None
 
 
+def _collect_dxf_points(msp):
+    """Collect all XY points from DXF entities, handling different entity types."""
+    pts = []
+    for e in msp:
+        etype = e.dxftype()
+        if etype == 'LWPOLYLINE':
+            pts.extend((p[0], p[1]) for p in e.get_points())
+        elif etype == 'POLYLINE':
+            pts.extend((v.dxf.location.x, v.dxf.location.y) for v in e.vertices)
+        elif etype == 'LINE':
+            pts.append((e.dxf.start.x, e.dxf.start.y))
+            pts.append((e.dxf.end.x, e.dxf.end.y))
+        elif etype == 'SPLINE':
+            # Use flattened approximation for accurate bounding box
+            try:
+                pts.extend((p[0], p[1]) for p in e.flattening(0.01))
+            except Exception:
+                pts.extend((p[0], p[1]) for p in e.control_points)
+        elif etype == 'ARC':
+            try:
+                pts.extend((p[0], p[1]) for p in e.flattening(0.01))
+            except Exception:
+                pts.append((e.dxf.center.x, e.dxf.center.y))
+        elif etype == 'CIRCLE':
+            cx, cy, r = e.dxf.center.x, e.dxf.center.y, e.dxf.radius
+            pts.extend([(cx - r, cy), (cx + r, cy), (cx, cy - r), (cx, cy + r)])
+        else:
+            try:
+                pts.extend((p[0], p[1]) for p in e.get_points())
+            except Exception:
+                pass
+    return pts
+
+
 def measure_dxf_bounding_box(dxf_path, folder_path, splitDXF=False):
     """Measure DXF cutout dimensions in mm. Returns 'Length x Width' string or empty."""
     try:
@@ -349,7 +383,9 @@ def measure_dxf_bounding_box(dxf_path, folder_path, splitDXF=False):
             measure_file = os.path.join(folder_path, os.path.basename(dxf_path))
         doc = ezdxf.readfile(measure_file)
         msp = doc.modelspace()
-        pts = [p for e in msp for p in e.get_points()]
+        pts = _collect_dxf_points(msp)
+        if not pts:
+            return ""
         length_mm = (max(p[0] for p in pts) - min(p[0] for p in pts)) * 25.4
         width_mm = (max(p[1] for p in pts) - min(p[1] for p in pts)) * 25.4
         return f"\nCutout: {length_mm:.1f}mm x {width_mm:.1f}mm"
@@ -367,9 +403,10 @@ def calculate_scoop_positions(dxf_path, folder_path, gridy_size, splitDXF=False)
             measure_file = os.path.join(folder_path, os.path.basename(dxf_path))
         doc = ezdxf.readfile(measure_file)
         msp = doc.modelspace()
-        pts = [p for e in msp for p in e.get_points()]
-        scoop_y_pos = max(p[1] for p in pts) * 25.4
-        scoop_y_neg = abs(min(p[1] for p in pts)) * 25.4
+        pts = _collect_dxf_points(msp)
+        if pts:
+            scoop_y_pos = max(p[1] for p in pts) * 25.4
+            scoop_y_neg = abs(min(p[1] for p in pts)) * 25.4
     except Exception:
         pass
     return scoop_y_pos, scoop_y_neg
