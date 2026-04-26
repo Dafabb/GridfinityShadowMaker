@@ -72,3 +72,4 @@ tool_holders/pending/**/*.json
 # Exception: keep everything in tool_holders/final/
 # The ! must come AFTER the ignore rules above
 !tool_holders/final/
+__pycache__/
