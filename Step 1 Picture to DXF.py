@@ -1,6 +1,10 @@
 from PyQt5 import QtWidgets, QtGui
 from src.ui import Ui_MainWindow # type: ignore
-from src.processing import find_diameter, find_contours, save_contours_as_dxf, select_image, generate_bin_scad, generate_test_slab, exit_application, clear_canvas, create_main_window, display_image_on_canvas
+from src.image.preprocessing import find_diameter, find_contours
+from src.image.display import clear_canvas, display_image_on_canvas
+from src.dxf.export import save_contours_as_dxf
+from src.scad.generators import generate_bin_scad, generate_test_slab
+from src.utils import select_image, exit_application, create_main_window
 import cv2
 import traceback
 from PIL import Image
