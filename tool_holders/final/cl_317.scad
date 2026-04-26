@@ -31,7 +31,7 @@ split_keep = "both"; // [both, left, right]
 /* [DXF Options] */
 // DXF file path 
 dxf_file_paths = [
-"cl_526_contour_1.dxf"
+"cl_317_contour_1.dxf"
 ];
 dxf_cut_depths = [10];
 // dxf_file_path replaced by dxf_file_paths
@@ -47,10 +47,10 @@ scoop_diameter = 20; // [10:1:40]
 scoop_depth = 10; // [5:1:30]
 slot_shape_1 = "oval"; // [none, rectangle, oval, scoop, triangle, keyhole, teardrop]
 slot_params_1 = [scoop_diameter, scoop_diameter, scoop_depth, 0]; // length, width, height, rotation
-slot_pos_1 = [0, 24.8]; // [x, y] in mm
+slot_pos_1 = [0, 27.5]; // [x, y] in mm
 slot_shape_2 = "oval"; // [none, rectangle, oval, scoop, triangle, keyhole, teardrop]
 slot_params_2 = [scoop_diameter, scoop_diameter, scoop_depth, 0];
-slot_pos_2 = [0, -24.8];
+slot_pos_2 = [0, -27.5];
 slot_shape = [slot_shape_1, slot_shape_2];
 slot_params = [slot_params_1, slot_params_2];
 slot_pos = [slot_pos_1, slot_pos_2];
@@ -60,7 +60,7 @@ slot_pos = [slot_pos_1, slot_pos_2];
 border_enabled = true; // true or false
 border_height = 2; // [1:0.5:6]
 text_enabled = true; // true or false
-text_content = "CL 526";
+text_content = "CL 317";
 border_text_size = 7; // [4:1:14]
 text_x = 68.0; // [-200:1:200]
 text_y = 30.0; // [-200:1:200]
