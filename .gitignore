@@ -51,6 +51,7 @@ tool_holders/src
 
 # Ignore generated contour DXF files across the repo
 **/*_contour_[0-9]*.dxf
+offset_pos_xy.pkl
 
 # Ignore work files: png, jpg, jpeg, 3mf, scad
 # Only in tool_holders/ and tool_holders/pending/ and their subfolders
@@ -62,12 +63,12 @@ tool_holders/*.3mf
 tool_holders/*.scad
 tool_holders/*.json
 
-tool_holders/pending/**/*.png
-tool_holders/pending/**/*.jpg
-tool_holders/pending/**/*.jpeg
-tool_holders/pending/**/*.3mf
-tool_holders/pending/**/*.scad
-tool_holders/pending/**/*.json
+tool_holders/_pending/**/*.png
+tool_holders/_pending/**/*.jpg
+tool_holders/_pending/**/*.jpeg
+tool_holders/_pending/**/*.3mf
+tool_holders/_pending/**/*.scad
+tool_holders/_pending/**/*.json
 
 # Exception: keep everything in tool_holders/final/
 # The ! must come AFTER the ignore rules above
